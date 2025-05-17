@@ -1,0 +1,80 @@
+check_project:
+  tags:
+    - servicios-ci-cd
+  stage: check_project
+  image: image.respository.domain/servicios/alpine:latest
+  script: |
+    PROJECT=$(echo "$CI_PROJECT_PATH" | cut -d'/' -f1)
+
+    # Se verifica la existencia del proyecto en Harbor
+    RESPUESTA=$(curl -i -s --location --head "https://$CI_REGISTRY_HARBOR/api/v2.0/projects?project_name=$PROJECT" \
+                            --header 'accept: application/json' \
+                            --header "Authorization: Basic $HARBOR_SECRET")
+
+    # Se obtiene el status code de la peticion
+    STATUS_CODE=$(echo "$RESPUESTA" | grep -Fi 'HTTP/1.1' | awk '{print $2}')
+
+    # Si el proyecto no existe, es creado
+    if [ "$STATUS_CODE" = "404" ]; then
+      # Se crea el proyecto
+      curl -s --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects' \
+              --header 'Authorization: Basic '$HARBOR_SECRET'' \
+              --header 'content-type: application/json' \
+              --data '{
+                "project_name": "'$PROJECT'",
+                "public": false,
+                "storage_limit": 20,
+                "metadata": {
+                  "public": "false"
+                }
+              }'
+    fi
+
+    # Es necesario otorgar permisos al grupo de esa persona para poder acceder al proyecto
+    # de Harbor. Para ello, se obtiene el email de la persona que ejecuto el pipeline
+    USER_EMAIL=$(echo $CI_COMMIT_AUTHOR | grep -o '<[^>]*>' | awk -F'[<>]' '{print $2}')
+
+    # Obtengo un token de Keycloak para poder consumir la API
+    TOKEN=$(curl -sXPOST 'https://'$KEYCLOAK_DOMAIN'/realms/master/protocol/openid-connect/token' \
+                  --header 'Content-Type: application/x-www-form-urlencoded' \
+                  --data-urlencode 'username='$KEYCLOAK_USERNAME'' \
+                  --data-urlencode 'password='$KEYCLOAK_PASSWORD'' \
+                  --data-urlencode 'client_id='$KEYCLOAK_CLIENT_ID'' \
+                  --data-urlencode 'client_secret='$KEYCLOAK_CLIENT_SECRET'' \
+                  --data-urlencode 'grant_type=password' | jq -r '.access_token' -)
+    
+    # Obtengo la informacion que posee el usuario dentro de keycloak
+    USER=$(curl -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/?username='$USER_EMAIL'' \
+                --header 'Authorization: Bearer '$TOKEN'')
+    
+    # Comprobar que el user no este vacio o igual a []
+    if [ -z "$USER" ] || [ "$USER" == "[]" ]; then
+      echo "[ERROR] User with email $USER_EMAIL not found in Keycloak. Exiting..."
+      exit 1
+    fi
+
+    # Obtengo el ID que posee el usuario dentro de keycloak
+    ID_USER=$(echo "$USER" | jq -r '.[0].id')
+    
+    # Listo los grupos a los cuales pertenece el usuario
+    GRUPOS=$(curl -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/'$ID_USER'/groups' \
+                  --header 'Authorization: Bearer '$TOKEN'')
+    
+    for GRUPO in $(echo "$GRUPOS" | jq -c '.[]'); do
+      GRUPO_PATH=$(echo "$GRUPO" | jq -r '.path')
+      # Voy recorriendo los grupos a excepcion de psi y aplicaciones/*
+      if [ "$GRUPO_PATH" != "/psi" ] && [[ ! "$GRUPO_PATH" =~ ^/aplicaciones ]]; then
+      # Le doy permisos de Maintainer ("role_id": 4) a cada uno de los grupos los cuales pertenece el usuario
+        curl --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects/'$PROJECT'/members' \
+              --header 'Authorization: Basic '$HARBOR_ADMIN_SECRET'' \
+              --header 'content-type: application/json' \
+              --data '{
+                "role_id": 4,
+                "member_group": {
+                  "group_name": "'$GRUPO_PATH'"
+                }
+              }'
+      fi
+    done
+  rules:
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH || $CI_COMMIT_TAG

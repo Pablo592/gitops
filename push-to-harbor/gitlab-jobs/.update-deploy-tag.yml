@@ -1,0 +1,152 @@
+.common_job_template: &common_job_template
+  id_tokens:
+      VAULT_ID_TOKEN:
+        aud: https://secrets.domain
+  tags:
+    - servicios-ci-cd
+  image: image.respository.domain/servicios/alpine:latest
+  stage: update_deploy_tag
+  variables:
+    # Default values and constants
+    GIT_USER_EMAIL: "push_harbor@gmail.com"
+    GIT_USER_NAME: "ci-cd-push-harbor"
+    VAULT_URL: "https://secrets.domain"
+    VAULT_AUTH_PATH: "/v1/auth/gitlab/login"
+    VAULT_SECRET_PATH: "/v1/gitlab/data/ci-cd/gitlab-impersonation-token"
+  before_script: |
+      #!/bin/bash
+
+      function setup_environment() {
+        # Verificar si existe el repo deploy
+        if [[ -z "$DEPLOY_REPO_PATH" ]]; then
+          echo "[INFO] No se encontró la variable "DEPLOY_REPO_PATH" en el repositorio. Finalizando job..."
+          exit 0
+        fi
+
+        # Si "$DEPLOY_REPO_PATH" comienza con "https://", remover el protocolo
+        DEPLOY_REPO_PATH=$(echo "$DEPLOY_REPO_PATH" | sed 's/https:\/\///')
+
+        # Extraer el numero de ticket desde el mensaje de commit
+        TICKET_NUMBER=$(echo "$CI_COMMIT_MESSAGE" | sed -n 's/.*\[\s*\([^]]*\)\s*\].*/\1/p' | sed 's/ //g' | sed 's/[^0-9]//g')
+
+        # Obtener token para Vault
+        echo "[INFO] Obteniendo token para Vault"
+        response=$(curl -s -X POST \
+            --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+            "${VAULT_URL}${VAULT_AUTH_PATH}")
+              
+        VAULT_TOKEN=$(echo "$response" | jq -r .auth.client_token)
+        if [[ $VAULT_TOKEN != "hvs."* ]]; then
+          echo "[ERROR] no se pudo obtener el token."
+          exit 1
+        fi
+
+        response=$(curl -s \
+          -H "X-Vault-Token: $VAULT_TOKEN" \
+          "${VAULT_URL}${VAULT_SECRET_PATH}"
+        )
+
+        if [[ "$response" == *'{"errors"'* ]]; then
+          error=$(echo "$response" | jq -r .errors[0])
+          echo "[ERROR] no se pudo obtener gitlab imp token: $error"
+          exit 1
+        fi
+
+        DEPLOY_TOKEN=$(echo "$response" | jq -r .data.data.token)
+
+        # Configurar Git
+        git config --global user.email "$GIT_USER_EMAIL"
+        git config --global user.name "$GIT_USER_NAME"
+        git clone https://oauth2:"$DEPLOY_TOKEN"@"$DEPLOY_REPO_PATH"
+
+        # Dividir la cadena usando / y obtener el último elemento, dividir esa cadena usando . y obtener el primer elemento
+        REPO=$(echo "$DEPLOY_REPO_PATH" | awk -F'/' '{print $NF}' | cut -d"." -f1)
+        
+        # Dividir la cadena usando / y obtener el último elemento
+        APP=$(echo "$CI_PROJECT_PATH" | awk -F'/' '{print $NF}')
+        
+        # Comprueba si la variable APP_DEFAULT tiene algun valor en las variables CI/CD de GitLab
+        APP=${APP_DEFAULT:-$APP}
+      }
+
+      function get_cluster() {
+        if [ "$CI_COMMIT_BRANCH" == "$DEV_BRANCH" ]; then
+          echo "dev"
+        elif [ "$CI_COMMIT_BRANCH" == "$DEMO_BRANCH" ]; then
+          echo "lab"
+        else
+          echo "prod"
+        fi
+      }
+
+      function update_values_file() {
+        local cluster=$1
+        local app=$2
+        local docker_tag=$3
+        local ticket_number=$4
+
+        # Determinar el nombre del archivo values
+        local values_file="$APP/values-${cluster}.yml"
+        if [ ! -f "$values_file" ]; then
+          values_file="$APP/values-${cluster}.yaml"
+        fi
+
+        # Comprueba si la variable VALUES_DEFAULT tiene algun valor
+        if [ -n "$VALUES_FILE_DEFAULT" ]; then
+          # Reemplazar "CLUSTER" con el contenido de cluster en APP
+          APP=${APP/CLUSTER/$cluster}
+          values_file="$APP/$VALUES_FILE_DEFAULT"
+        fi
+
+        # Check if file exists
+        if [ ! -f "$values_file" ]; then
+          echo "[ERROR] File $values_file not found"
+          return 1
+        fi
+
+        # Actualizar el tag
+        if yq -e ".deployment.image.tag" "$values_file" &> /dev/null; then
+          yq -i ".deployment.image.tag = \"${docker_tag}\"" "$values_file"
+        elif yq -e ".image.tag" "$values_file" &> /dev/null; then
+          yq -i ".image.tag = \"${docker_tag}\"" "$values_file"
+        else
+          echo "[ERROR] No se encontró la clave de la imagen en el archivo $values_file"
+          return 1
+        fi
+
+        # Commit y push de los cambios
+        (git add . && \
+         git commit -m "[${ticket_number}] Se actualizó la versión de la imagen $app-${cluster}: $docker_tag" && \
+         git push) || return 0
+      }
+
+      # Setup inicial del ambiente
+      setup_environment
+
+update_tag_dev_demo:
+  <<: *common_job_template
+  script: |
+      #!/bin/bash
+      cd $REPO || exit
+      
+      CLUSTER=$(get_cluster)
+      update_values_file "$CLUSTER" "$APP" "$DOCKER_TAG" "$TICKET_NUMBER"
+
+  dependencies:
+    - build_image_dev_demo
+  rules:
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH
+
+update_tag_prod:
+  <<: *common_job_template
+  script: |
+      #!/bin/bash
+      cd $REPO || exit
+      
+      CLUSTER=$(get_cluster)
+      update_values_file "$CLUSTER" "$APP" "$DOCKER_TAG" "$TICKET_NUMBER"
+
+  dependencies: 
+    - build_image_prod
+  rules:
+    - if: $CI_COMMIT_TAG

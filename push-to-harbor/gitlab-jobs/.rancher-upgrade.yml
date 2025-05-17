@@ -1,0 +1,48 @@
+.rancher_upgrade_common:
+  image: image.respository.domain/dev/tools/cdrx/rancher-gitlab-deploy:latest
+  stage: rancher_upgrade
+  tags: 
+    - ci-cd
+  script:
+    - |
+ 
+      if [ "$CI_COMMIT_BRANCH" == "$DEV_BRANCH" ]; then
+          RANCHER_ACCESS_KEY=$RANCHER_ACCESS_KEY_DEV
+          RANCHER_SECRET_KEY=$RANCHER_SECRET_KEY_DEV
+      else
+        if [ "$CI_COMMIT_BRANCH" == "$DEMO_BRANCH" ]; then
+            RANCHER_ACCESS_KEY=$RANCHER_ACCESS_KEY_DEMO
+            RANCHER_SECRET_KEY=$RANCHER_SECRET_KEY_DEMO
+        fi
+      fi
+    - |
+      if [ -z $RANCHER_STACK ]; then
+          RANCHER_STACK=$CI_PROJECT_NAMESPACE
+      fi
+    - |
+      if [ -z $RANCHER_SERVICE ]; then
+          RANCHER_SERVICE=$CI_PROJECT_NAME
+      fi
+    - upgrade 
+      --rancher-key $RANCHER_ACCESS_KEY 
+      --rancher-secret $RANCHER_SECRET_KEY
+      --stack $RANCHER_STACK
+      --service $RANCHER_SERVICE
+      --new-image $IMAGE
+      --no-finish-upgrade 
+      --create
+  dependencies:
+    - build_image_dev_demo
+    - build_image_prod
+    - get_docker_image_push_url
+
+rancher_upgrade_auto:
+  extends: .rancher_upgrade_common
+  rules:
+    - if: $RANCHER_MANUAL_DEPLOY == "false" && ($CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH) && $DEPLOY == $RANCHER
+
+rancher_upgrade_manual:
+  extends: .rancher_upgrade_common
+  rules:
+    - if: $RANCHER_MANUAL_DEPLOY == "true" && ($CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH) && $DEPLOY == $RANCHER
+      when: manual

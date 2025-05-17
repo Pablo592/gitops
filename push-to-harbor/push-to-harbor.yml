@@ -1,0 +1,28 @@
+variables:
+  HUB: "$CI_REGISTRY_HARBOR/$CI_PROJECT_PATH"
+  DEV_BRANCH: 'dev'
+  DEMO_BRANCH: 'demo'
+  PROD_BRANCH: 'prod'
+  DOCKER_BUILD_CACHE: "true"
+
+.global_rules: 
+  rules:
+    - if: $CI_COMMIT_BRANCH == $PROD_BRANCH || $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH  || $CI_COMMIT_TAG
+
+stages:
+  - check_for_dockerfile
+  - pre_build
+  - check_project
+  - build_image
+  - update_deploy_tag
+
+include:
+  - project: 'servicios/tools/pipeline-utils'
+    ref: main
+
+    file:
+      - '/gitlab-jobs/.check-for-dockerfile.yml'
+      - '/gitlab-jobs/.pre-build.yml'
+      - '/gitlab-jobs/.check-project.yml'
+      - '/gitlab-jobs/.build-image.yml'
+      - '/gitlab-jobs/.update-deploy-tag.yml'

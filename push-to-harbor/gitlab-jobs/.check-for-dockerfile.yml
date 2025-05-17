@@ -1,0 +1,20 @@
+check_for_dockerfile:
+  tags:
+    - servicios-ci-cd
+  stage: check_for_dockerfile
+  image: image.respository.domain/servicios/tools/pipeline-utils/argocd-deploy/dev:latest
+  variables:
+    DOCKERFILES: dockerfiles.txt
+  script:
+    - |
+      find . -type f -name 'Dockerfile' > $DOCKERFILES
+      if [ ! -s $DOCKERFILES ]; then # Check if the file exists and has size > 0
+        echo -e "[ERROR] Dockerfile missing. Exiting...\n"
+        exit 1
+      else
+        echo -e "\n[INFO] Dockerfile found. Proceeding with the build...\n"
+      fi
+  artifacts:
+    paths:
+      - $DOCKERFILES
+    expire_in: 1 hour

@@ -1,0 +1,132 @@
+.build_image_common:
+  tags:
+    - servicios-ci-cd
+  stage: build_image
+  image: image.respository.domain/servicios/kaniko-git:2.2
+  variables:
+    DOCKERFILES: dockerfiles.txt
+  before_script:
+    - |
+      # Función para construir y pushear una imagen a Harbor
+      function build_and_push() {
+        local dockerfile="$1"
+        local image="$2"
+        local image_latest="$3"
+        local directory="$4"
+
+        sed -i '/^\(FROM[[:space:]]*\(harbor.psi\|registry.srv\|quay.io\|public.ecr.aws\)\|FROM[[:space:]]*\$\|FROM[[:space:]]*[a-zA-Z0-9_-]\+[[:space:]]\+as\)/!s#^FROM[[:space:]]*\(.*\)#FROM image.respository.domain/docker-hub/\1#' "$dockerfile"
+
+        /kaniko/executor \
+          --cleanup \
+          --context ./$directory \
+          --dockerfile $dockerfile \
+          --destination $image \
+          --destination $image_latest \
+          --cache="$DOCKER_BUILD_CACHE" \
+          --cache-repo="$CI_REGISTRY_HARBOR/kaniko-cache/$CI_PROJECT_PATH/$PROD_BRANCH" \
+          --cache-copy-layers=true \
+          --cache-ttl=24h \
+          $BUILD_ARGS_CMD
+
+        echo "Imagenes $image y $image_latest pusheadas a Harbor"
+        echo "IMAGE=$image" >> tag.env
+      }
+
+      find . -type f -name 'Dockerfile' -not -path "*/\.*/*" > $DOCKERFILES
+
+      # Verificar que se encontraron Dockerfiles
+      if [ ! -s "$DOCKERFILES" ]; then
+        echo "[ERROR] No se encontraron Dockerfiles en el repositorio."
+        exit 1
+      fi
+
+      # Configurar credenciales de Harbor
+      mkdir -p /kaniko/.docker
+      echo "{\"auths\":{\"$CI_REGISTRY_HARBOR\":{\"username\":\"$CI_REGISTRY_USER_HARBOR\",\"password\":\"$CI_REGISTRY_PASSWORD_HARBOR\"}}}" > /kaniko/.docker/config.json
+
+      # Esto es útil si dentro del repositorio que contiene al Dockerfile se configura
+      # una variable BUILD_ARGS con los argumentos necesarios para la construcción de la imagen
+      # en la forma CLAVE=VALOR, separados por un salto de linea
+      # Por ejemplo,
+      # CLAVE1=VALOR1
+      # CLAVE2=VALOR2
+      # CLAVE3=VALOR3
+      # ...
+
+      BUILD_ARGS_CMD=""
+
+      # Escribimos BUILD_ARGS a un archivo temporal
+      echo "$BUILD_ARGS" > build_args.txt
+
+      if [ ! -z "$BUILD_ARGS" ]; then
+        while IFS= read -r line; do
+          if [ ! -z "$line" ]; then
+            BUILD_ARGS_CMD="$BUILD_ARGS_CMD --build-arg $line"
+          fi
+        done < "build_args.txt"
+      fi
+      
+  artifacts:
+    reports:
+      dotenv: tag.env
+
+build_image_dev_demo:
+  image: image.respository.domain/servicios/kaniko:v1.16.0-debug
+  extends: .build_image_common
+  script:
+    - |
+      echo "TAG=$CI_COMMIT_SHORT_SHA" > tag.env
+      
+      while IFS= read -r linea; do
+        DIRECTORY=$(echo "$linea" | sed 's/\/Dockerfile$//; s/^\.\///')
+        if [ "$DIRECTORY" == "." ]; then
+          IMAGE=$HUB/$CI_COMMIT_BRANCH:$CI_COMMIT_SHORT_SHA
+          IMAGE_LATEST=$HUB/$CI_COMMIT_BRANCH:latest
+        else
+          IMAGE=$HUB/$DIRECTORY/$CI_COMMIT_BRANCH:$CI_COMMIT_SHORT_SHA
+          IMAGE_LATEST=$HUB/$DIRECTORY/$CI_COMMIT_BRANCH:latest
+        fi
+
+        build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
+      done < "$DOCKERFILES"
+  artifacts:
+    reports:
+      dotenv: tag.env
+  dependencies:
+    - check_project
+  rules:
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH
+
+build_image_prod:
+  image: image.respository.domain/servicios/kaniko:v1.16.0-debug
+  extends: .build_image_common
+  script:
+    - |
+      if [ "$TAG_IS_IN_PROD" != "true" ]; then
+        echo "[ERROR] Tag not found in branch 'prod'."
+        exit 1
+      fi
+
+      echo "TAG=$DOCKER_TAG" > tag.env
+
+      while IFS= read -r linea; do
+        DIRECTORY=$(echo "$linea" | sed 's/\/Dockerfile$//; s/^\.\///')
+        if [ "$DIRECTORY" == "." ]; then
+          IMAGE=$HUB:$DOCKER_TAG
+          IMAGE_LATEST=$HUB:latest
+        else
+          IMAGE=$HUB/$DIRECTORY:$DOCKER_TAG
+          IMAGE_LATEST=$HUB/$DIRECTORY:latest
+        fi
+
+        build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
+      done < "$DOCKERFILES"
+  artifacts:
+    reports:
+      dotenv: tag.env
+  dependencies: 
+    - test_tag_in_prod
+    - check_project
+    - get_docker_image_push_url
+  rules:
+    - if: $CI_COMMIT_TAG

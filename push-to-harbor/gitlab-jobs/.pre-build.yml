@@ -1,0 +1,49 @@
+## Simple capa extra para llenar DOCKER_IMAGE_URL con la url correcta donde se pushea la imagen de Docker
+## También establece DOCKER_IMAGE_URL_LATEST, con la etiqueta LATEST
+get_docker_image_push_url:
+  tags:
+    - servicios-ci-cd
+  stage: pre_build
+  image: image.respository.domain/servicios/alpine:latest
+  script: |
+    if [ -z $CI_COMMIT_TAG ]; then
+      echo "DOCKER_IMAGE_URL=$HUB/$CI_COMMIT_BRANCH:$CI_COMMIT_SHORT_SHA" >> docker_image_url.env
+      echo "DOCKER_IMAGE_URL_LATEST=$HUB/$CI_COMMIT_BRANCH:latest" >> docker_image_url.env
+      echo "DOCKER_TAG=$CI_COMMIT_SHORT_SHA" >> docker_image_url.env
+    else
+      echo "DOCKER_IMAGE_URL=$HUB:$CI_COMMIT_TAG" >> docker_image_url.env
+      echo "DOCKER_IMAGE_URL_LATEST=$HUB:latest" >> docker_image_url.env
+      echo "DOCKER_TAG=$CI_COMMIT_TAG" >> docker_image_url.env
+    fi
+  artifacts:
+    reports:
+      dotenv: docker_image_url.env
+    expire_in: 1 hour
+  rules:
+    - if: ($CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH || $CI_COMMIT_TAG)
+
+## Evaluar si el tag está en la rama prod
+test_tag_in_prod:
+  tags:
+    - servicios-ci-cd
+  image: image.respository.domain/servicios/alpine:latest
+  stage: pre_build
+  script: |
+    git config --global --add safe.directory $CI_PROJECT_DIR
+    echo "[INFO] Forcing branch updates" # Si no GitLab no necesariamente actualiza la metadata de los heads
+    git fetch --quiet
+    CURRENT_BRANCH=$(git branch -a --contains $(git rev-list -n 1 tags/$CI_COMMIT_TAG) | tr -d '*' | grep origin | awk -F/ '{print $3}')
+    BRANCH_NAME=$(echo $CURRENT_BRANCH |  { grep -ow $PROD_BRANCH || test $? == 1; })
+
+    if  [ "$BRANCH_NAME" == "$PROD_BRANCH" ]; then
+      TAG_IS_IN_PROD="true"
+    else
+      TAG_IS_IN_PROD="false"
+    fi
+    echo "TAG_IS_IN_PROD=$TAG_IS_IN_PROD" >> tag_status.env
+  artifacts:
+    reports:
+      dotenv: tag_status.env
+    expire_in: 1 hour
+  rules:
+    - if: $CI_COMMIT_TAG
