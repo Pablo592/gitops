@@ -1,27 +1,3 @@
-## Simple capa extra para llenar DOCKER_IMAGE_URL con la url correcta donde se pushea la imagen de Docker
-## También establece DOCKER_IMAGE_URL_LATEST, con la etiqueta LATEST
-get_docker_image_push_url:
-  tags:
-    - servicios-ci-cd
-  stage: pre_build
-  image: image.respository.domain/servicios/alpine:latest
-  script: |
-    if [ -z $CI_COMMIT_TAG ]; then
-      echo "DOCKER_IMAGE_URL=$HUB/$CI_COMMIT_BRANCH:$CI_COMMIT_SHORT_SHA" >> docker_image_url.env
-      echo "DOCKER_IMAGE_URL_LATEST=$HUB/$CI_COMMIT_BRANCH:latest" >> docker_image_url.env
-      echo "DOCKER_TAG=$CI_COMMIT_SHORT_SHA" >> docker_image_url.env
-    else
-      echo "DOCKER_IMAGE_URL=$HUB:$CI_COMMIT_TAG" >> docker_image_url.env
-      echo "DOCKER_IMAGE_URL_LATEST=$HUB:latest" >> docker_image_url.env
-      echo "DOCKER_TAG=$CI_COMMIT_TAG" >> docker_image_url.env
-    fi
-  artifacts:
-    reports:
-      dotenv: docker_image_url.env
-    expire_in: 1 hour
-  rules:
-    - if: ($CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH || $CI_COMMIT_TAG)
-
 ## Evaluar si el tag está en la rama prod
 test_tag_in_prod:
   tags:
