@@ -130,7 +130,7 @@ update_tag_dev_demo:
       cd $REPO || exit
       
       CLUSTER=$(get_cluster)
-      update_values_file "$CLUSTER" "$APP" "$DOCKER_TAG" "$TICKET_NUMBER"
+      update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_SHORT_SHA" "$TICKET_NUMBER"
 
   dependencies:
     - build_image_dev_demo
@@ -144,7 +144,7 @@ update_tag_prod:
       cd $REPO || exit
       
       CLUSTER=$(get_cluster)
-      update_values_file "$CLUSTER" "$APP" "$DOCKER_TAG" "$TICKET_NUMBER"
+      update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_TAG" "$TICKET_NUMBER"
 
   dependencies: 
     - build_image_prod

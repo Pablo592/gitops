@@ -16,17 +16,17 @@
 
         sed -i '/^\(FROM[[:space:]]*\(harbor.psi\|registry.srv\|quay.io\|public.ecr.aws\)\|FROM[[:space:]]*\$\|FROM[[:space:]]*[a-zA-Z0-9_-]\+[[:space:]]\+as\)/!s#^FROM[[:space:]]*\(.*\)#FROM image.respository.domain/docker-hub/\1#' "$dockerfile"
 
-        /kaniko/executor \
-          --cleanup \
-          --context ./$directory \
-          --dockerfile $dockerfile \
-          --destination $image \
-          --destination $image_latest \
-          --cache="$DOCKER_BUILD_CACHE" \
-          --cache-repo="$CI_REGISTRY_HARBOR/kaniko-cache/$CI_PROJECT_PATH/$PROD_BRANCH" \
-          --cache-copy-layers=true \
-          --cache-ttl=24h \
-          $BUILD_ARGS_CMD
+       /kaniko/executor \
+         --cleanup \                                            # Limpia los archivos temporales luego de la build
+         --context ./$directory \                               # Directorio de contexto
+         --dockerfile $dockerfile \                             # Dockerfile a usar
+         --destination $image \                                 # Tag principal (ej. v1.0.0)
+         --destination $image_latest \                          # Tag adicional (ej. latest)
+         --cache="$DOCKER_BUILD_CACHE" \                        # Activa o no el uso de caché
+         --cache-repo="$CI_REGISTRY_HARBOR/kaniko-cache/$CI_PROJECT_PATH/$PROD_BRANCH" \  # Repositorio remoto de caché
+         --cache-copy-layers=true \                             # Reutiliza capas copiadas si no cambiaron
+         --cache-ttl=24h \                                      # Tiempo de validez de la caché
+         $BUILD_ARGS_CMD                                        # Argumentos adicionales de build (pasados como --build-arg)
 
         echo "Imagenes $image y $image_latest pusheadas a Harbor"
         echo "IMAGE=$image" >> tag.env
