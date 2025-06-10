@@ -1,0 +1,11 @@
+apiVersion: builtin
+kind: HelmChartInflationGenerator
+metadata:
+  name: chartmuseum
+name: chartmuseum
+repo: "https://chartmuseum.github.io/charts"
+releaseName: chartmuseum
+namespace: chartmuseum
+valuesFile: ./values.yaml
+#includeCRDs: true
+#version: 2.0.0

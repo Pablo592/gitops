@@ -1,0 +1,7 @@
+resources:
+- secret.yaml
+
+generators:
+- helmchart.yaml
+
+namespace: chartmuseum
