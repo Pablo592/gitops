@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-05-24T17-08-30Z-cpuv1
+    container_name: minio
+    command: ["minio", "server", "/data", "--console-address", ":9090"]
+    ports:
+      - "9000:9000"  # API S3
+      - "9090:9090"  # Web UI
+    volumes:
+      - data:/data
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    restart: unless-stopped
+
+volumes:
+  data:
+    driver: local
