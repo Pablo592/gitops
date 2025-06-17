@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-05-24T17-08-30Z-cpuv1
+    image: pablogrio/minio:latest
     container_name: minio
     command: ["minio", "server", "/data", "--console-address", ":9090"]
     ports:
@@ -18,3 +16,4 @@ services:
 volumes:
   data:
     driver: local
+
