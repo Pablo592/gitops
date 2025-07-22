@@ -1,0 +1,71 @@
+# Cluster donde será desplegado el proyecto
+# Puede ser 'prod', 'dev' o 'lab'
+# Default: dev
+cluster: "dev"
+
+# Especificar la version del chart a utilizar
+chart_version: "1.0.0"
+
+# 'group' será utilizado como el namespace de Kubernetes
+# 'project' será utilizado como el nombre de recursos
+group: "grupo-gitlab"
+project: "proyecto"
+owner: "owner"
+
+tipo: Deployment  # Cronjob
+
+image:
+  name: "harbor.psi.unc.edu.ar/docker-hub/alpine"
+  tag: "latest"
+  pullPolicy: IfNotPresent # Puede ser 'Always', 'IfNotPresent' o 'Never'
+
+command:
+  container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
+  args:
+    - |
+      echo "Ejecutando comando"
+      echo "Hola Mundo"
+      sleep infinity
+
+ports:
+  - port: 80
+    targetPort: 80
+  - port: 443
+    targetPort: 443
+
+env:
+  - name: KC_HTTPS_CERTIFICATE_FILE
+    value: /opt/cert/tls.crt 
+  - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+    value: /opt/key/tls.key  
+  - name: KC_HEALTH_ENABLED
+    value: "true"
+
+volumes:
+  - size: 5Gi
+    mount: /etc/storage
+  - size: 10Gi
+    mount: /etc/other/storage
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2048Mi"
+
+configMaps:
+  - name: init.sh
+    data: |
+          #ejemplo
+          comdocII.release=3.0
+          # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
+          comdocII.server=UNC
+          # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
+          # dentro de un documento
+          comdocII.max-upload=20
+          # Link ofrecido para descargar lector de archivos PDF
+          comdocII.downloads.visor-pdf=http://adobe.com/reader
+    path: /opt/map1
+    chmod: 0755

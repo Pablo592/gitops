@@ -1,0 +1,25 @@
+{{- $namespace := .Values.group | replace "." "" -}}
+{{- $name := .Values.project -}}
+
+{{- if .Values.ports }}
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ $name }}
+  namespace: {{ $namespace }}
+  name: {{ $name }}
+spec:
+  type: ClusterIP
+  ports:
+  {{- range .Values.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: TCP
+      name: {{ $name }}-{{ .port }}-port
+  {{- end }}
+  selector:
+    app: {{ $name }}
+
+{{- end }}

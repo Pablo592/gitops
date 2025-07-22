@@ -1,0 +1,22 @@
+{{- $name := .Values.project -}}
+{{- $namespace := .Values.group | replace "." "" -}}
+
+{{- if .Values.volumes }}
+{{- range $index, $vol := .Values.volumes }}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-{{ $vol.mount | replace "/" "-" }}-pvc
+  namespace: {{ $namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ $vol.size | default "1Gi" }}
+  storageClassName: nfs-csi-nas
+
+{{- end }}
+{{- end }}
