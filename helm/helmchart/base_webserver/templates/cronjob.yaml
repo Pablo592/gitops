@@ -1,0 +1,21 @@
+{{- $namespace := .Values.group | replace "." "" -}}
+{{- $name := .Values.project -}}
+{{- $ctx := dict "name" $name "Values" .Values "namespace" $namespace -}}
+
+{{- if eq (.Values.type) "2" -}}
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+spec:
+  schedule: {{ .Values.crontab }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+{{- include "base_webserver.deploy-body" $ctx | nindent 10 }}
+{{- end }}

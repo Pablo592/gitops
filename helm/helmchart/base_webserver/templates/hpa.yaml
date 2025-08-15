@@ -10,7 +10,11 @@ metadata:
 spec:
  scaleTargetRef:
    apiVersion: apps/v1
-   kind: {{ .Values.type | default "Deployment" }}
+   {{- if eq (int (default 1 .Values.type)) 1 }}
+   kind: Deployment
+   {{- else if eq (int .Values.type) 2 }}
+   kind: CronJob
+   {{- end }}
    name: {{ $name }}
  minReplicas: {{ .Values.hpa.minReplicas }}
  maxReplicas: {{ .Values.hpa.maxReplicas }}

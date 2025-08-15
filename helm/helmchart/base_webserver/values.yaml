@@ -12,7 +12,8 @@ group: "grupo-gitlab"
 project: "proyecto"
 owner: "owner"
 
-type: Deployment  # Cronjob
+type: "2"  # Deployment = 1 ; CronJob = 2
+crontab: "0 12 * * 0"
 
 image:
   name: "harbor.psi.unc.edu.ar/docker-hub/alpine"
@@ -26,7 +27,7 @@ command:
       echo "Ejecutando comando"
       echo "Hola Mundo"
       #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
-      speep infinity
+      sleep infinity
 
 ports:
   - port: 80

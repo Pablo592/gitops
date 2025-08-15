@@ -1,0 +1,63 @@
+{{- define "base_webserver.deploy-body" -}}
+- name: {{ .name }}
+  image: {{ .Values.image.name }}:{{ .Values.image.tag }}
+  imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+  command:
+    - "{{ .Values.command.container_shell }}"
+    - "-c"
+  args:
+  {{- toYaml .Values.command.args | nindent 4 }}
+
+    {{- if .Values.ports }}
+  ports:
+      {{- range .Values.ports }}
+    - name: {{ .name }}
+      containerPort: {{ .targetPort }}
+      {{- end }}
+    {{- end }}
+
+    {{- if .Values.env }}
+  env:
+      {{- range .Values.env }}
+    - name: {{ .name }}
+      value: {{ .value | quote }}
+      {{- end }}
+    {{- end }}
+
+    {{- if or .Values.volumes .Values.configMaps }}
+  volumeMounts:
+      {{- range .Values.volumes }}
+    - name: volume{{ .mount | replace "/" "-" }}
+      mountPath: {{ .mount }}
+      {{- end }}
+      {{- range .Values.configMaps }}
+    - name: cfmap-{{ .name | replace "." "-" }}
+      mountPath: {{ .path }}
+      {{- end }}
+    {{- end }}
+
+  {{- if .Values.resources }}
+  resources:
+    requests:
+      cpu: {{ .Values.resources.requests.cpu | quote }}
+      memory: {{ .Values.resources.requests.memory | quote }}
+    limits:
+      cpu: {{ .Values.resources.limits.cpu | quote }}
+      memory: {{ .Values.resources.limits.memory | quote }}
+  {{- end }}
+
+  {{- if or .Values.volumes .Values.configMaps }}
+volumes:
+    {{- range .Values.volumes }}
+  - name: volume{{ .mount | replace "/" "-" }}
+    persistentVolumeClaim:
+      claimName: {{ $.name }}-{{ .mount | replace "/" "-" }}-pvc
+    {{- end }}
+    {{- range .Values.configMaps }}
+  - name: cfmap-{{ .name | replace "." "-" }}
+    configMap:
+      name: cfmap{{ .path | replace "/" "-" }}-{{ .name | replace "." "-" }}
+      defaultMode: {{ .chmod | default 493 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
