@@ -12,7 +12,7 @@ group: "grupo-gitlab"
 project: "proyecto"
 owner: "owner"
 
-tipo: Deployment  # Cronjob
+type: Deployment  # Cronjob
 
 image:
   name: "harbor.psi.unc.edu.ar/docker-hub/alpine"
@@ -25,12 +25,15 @@ command:
     - |
       echo "Ejecutando comando"
       echo "Hola Mundo"
-      sleep infinity
+      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
+      speep infinity
 
 ports:
   - port: 80
+    name: http
     targetPort: 80
   - port: 443
+    name: https
     targetPort: 443
 
 env:
@@ -69,3 +72,8 @@ configMaps:
           comdocII.downloads.visor-pdf=http://adobe.com/reader
     path: /opt/map1
     chmod: 0755
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 80
