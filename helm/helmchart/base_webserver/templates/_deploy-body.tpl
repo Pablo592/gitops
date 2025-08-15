@@ -2,19 +2,22 @@
 - name: {{ .name }}
   image: {{ .Values.image.name }}:{{ .Values.image.tag }}
   imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+
+  {{- if .Values.command }}
   command:
     - "{{ .Values.command.container_shell }}"
     - "-c"
   args:
   {{- toYaml .Values.command.args | nindent 4 }}
 
+  {{- end }}
+
     {{- if .Values.ports }}
   ports:
-      {{- range .Values.ports }}
     - name: {{ .name }}
       containerPort: {{ .targetPort }}
-      {{- end }}
     {{- end }}
+
 
     {{- if .Values.env }}
   env:

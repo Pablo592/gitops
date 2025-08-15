@@ -1,0 +1,47 @@
+{{- $namespace := .Values.group | replace "." "" -}}
+{{- $name := .Values.project -}}
+{{- $port := .Values.port.port -}}
+{{- $classname := .Values.ingress.ingressClassName -}}
+{{- range .Values.ingress.hosts }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  {{- if eq (len $.Values.ingress.hosts) 1 }}
+  name: {{ $namespace }}-{{ $name }}-ingress
+  {{- else }}
+  name: {{ $namespace }}-{{ $name }}-{{ .host | replace "." "" }}-ingress
+  {{- end }}
+  namespace: {{ $namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    #kubernetes.io/tls-acme: "true"
+    #nginx.ingress.kubernetes.io/affinity: cookie
+    #nginx.ingress.kubernetes.io/session-cookie-hash: index
+    #nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $name }}-k8s
+    {{- if hasKey . "annotations" }}
+    {{- if or .annotations (and .annotations.enabled (gt (len .annotations.list) 0)) }}
+    {{- range $key, $value := .annotations.list }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if hasKey . "allowedIPs" }}
+    {{- if ne (len .allowedIPs) 0 }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," .allowedIPs | quote }}
+    {{- end }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $classname | default "nginx" }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: {{ $port }}
+---
+{{- end }}

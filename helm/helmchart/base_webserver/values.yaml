@@ -12,30 +12,29 @@ group: "grupo-gitlab"
 project: "proyecto"
 owner: "owner"
 
-type: "2"  # Deployment = 1 ; CronJob = 2
+type: "1"  # Deployment = 1 ; CronJob = 2
 crontab: "0 12 * * 0"
 
 image:
-  name: "harbor.psi.unc.edu.ar/docker-hub/alpine"
+  name: "harbor.psi.unc.edu.ar/docker-hub/httpd"
   tag: "latest"
   pullPolicy: IfNotPresent # Puede ser 'Always', 'IfNotPresent' o 'Never'
 
-command:
-  container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
-  args:
-    - |
-      echo "Ejecutando comando"
-      echo "Hola Mundo"
-      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
-      sleep infinity
+#command:
+#  container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
+#  args:
+#    - |
+#      echo "Ejecutando comando"
+#      echo "Hola Mundo"
+#      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
+#      sleep infinity
 
-ports:
-  - port: 80
-    name: http
-    targetPort: 80
-  - port: 443
-    name: https
-    targetPort: 443
+
+port:
+  port: 80
+  name: http
+  targetPort: 80
+
 
 env:
   - name: KC_HTTPS_CERTIFICATE_FILE
@@ -78,3 +77,32 @@ hpa:
   minReplicas: 1
   maxReplicas: 4
   targetCPUUtilizationPercentage: 80
+
+
+# Ingress
+ingress:
+    ingressClassName: "" # IngressClassName por defecto es 'nginx'
+    hosts: # Todos los hosts apuntaran al mismo servicio
+    -  host: "app"
+       annotations:
+          enabled: false
+          list:
+          kubernetes.io/tls-acme: "true"
+
+       #allowedIPs: 
+       # - 192.168.1.1
+        #-
+        #-
+        #-
+
+    -  host: "appi"
+       annotations:
+          enabled: false
+          list:
+          kubernetes.io/tls-acme: "true"
+
+       #allowedIPs: 
+       # - 192.168.1.2
+        #-
+        #-
+        #-
