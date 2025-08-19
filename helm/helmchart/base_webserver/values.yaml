@@ -1,7 +1,7 @@
 # Cluster donde será desplegado el proyecto
 # Puede ser 'prod', 'dev' o 'lab'
 # Default: dev
-cluster: "dev"
+cluster: "prod"
 
 # Especificar la version del chart a utilizar
 chart_version: "1.0.0"
@@ -43,6 +43,33 @@ env:
     value: /opt/key/tls.key  
   - name: KC_HEALTH_ENABLED
     value: "true"
+
+secrets:
+  - name: SECRET_ENV_VAR
+    path: "path/in/vault"
+    key: "key-in-vault"
+  - name: SECRET_ENV_VAR2
+    path: "path/in/vault2"
+    key: "key-in-vault2"
+
+fileFromSecret:
+  files:
+    - fileName: "config.properties"
+      path: "path/in/vault"
+      secretKey: "key-in-vault"
+      mount: "/etc/config"
+    - fileName: "any.properties"
+      path: "dev/apache"
+      secretKey: "other-key-in-vault"
+      mount: "/other/mount"
+
+environmentFromSecret:
+  secrets:
+    - path: "path/in/vault"
+    - path: "path/in/vault2"
+    - path: "path/in/vault3"
+
+
 
 volumes:
   - size: 5Gi
