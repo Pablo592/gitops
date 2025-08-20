@@ -80,8 +80,8 @@ volumes:
     {{- range .Values.configMaps }}
   - name: cfmap-{{ .name | replace "." "-" }}
     configMap:
-      name: cfmap{{ .path | replace "/" "-" }}-{{ .name | replace "." "-" }}
-      defaultMode: {{ .chmod | default 493 }}
+      name: cfmap-{{ .name | replace "." "-" }}
+      defaultMode: {{ .chmod | default "0755" }}
     {{- end }}
   {{- end }}
 {{- end }}

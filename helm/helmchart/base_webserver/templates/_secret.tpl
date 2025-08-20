@@ -3,7 +3,7 @@
 apiVersion: secrets.hashicorp.com/v1beta1
 kind: VaultStaticSecret
 metadata:
-  name: {{ .name }}-vss
+  name: {{ .name }}-{{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-vss
   namespace: {{ .namespace }}
 spec:
   type: kv-v2
