@@ -53,7 +53,6 @@ secrets:
     key: "key-in-vault2"
 
 fileFromSecret:
-  files:
     - fileName: "config.properties"
       path: "path/in/vault"
       secretKey: "key-in-vault"
@@ -64,7 +63,6 @@ fileFromSecret:
       mount: "/other/mount"
 
 environmentFromSecret:
-  secrets:
     - path: "path/in/vault"
     - path: "path/in/vault2"
     - path: "path/in/vault3"

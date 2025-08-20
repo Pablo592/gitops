@@ -27,7 +27,14 @@
       {{- end }}
     {{- end }}
 
-    {{- if or .Values.volumes .Values.configMaps }}
+    {{- if .Values.environmentFromSecret }}
+  envFrom:
+      {{- range .Values.environmentFromSecret }}
+    - secretRef:
+        name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-secret
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.volumes .Values.configMaps .Values.fileFromSecret }}
   volumeMounts:
       {{- range .Values.volumes }}
     - name: volume{{ .mount | replace "/" "-" }}
@@ -36,6 +43,11 @@
       {{- range .Values.configMaps }}
     - name: cfmap-{{ .name | replace "." "-" }}
       mountPath: {{ .path }}
+      {{- end }}
+      {{- range .Values.fileFromSecret }}
+    - name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-{{ .secretKey | replace "/" "-" }}
+      mountPath: {{ .mount }}
+      readOnly: true
       {{- end }}
     {{- end }}
 
@@ -49,12 +61,21 @@
       memory: {{ .Values.resources.limits.memory | quote }}
   {{- end }}
 
-  {{- if or .Values.volumes .Values.configMaps }}
+  {{- if or .Values.volumes .Values.configMaps .Values.fileFromSecret }}
 volumes:
     {{- range .Values.volumes }}
   - name: volume{{ .mount | replace "/" "-" }}
     persistentVolumeClaim:
       claimName: {{ $.name }}-{{ .mount | replace "/" "-" }}-pvc
+    {{- end }}
+    
+    {{- range .Values.fileFromSecret }}
+  - name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-{{ .secretKey | replace "/" "-" }}
+    secret:
+      secretName: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-secret
+      items:
+       - key: {{ .secretKey }}
+         path: {{ .fileName }}
     {{- end }}
     {{- range .Values.configMaps }}
   - name: cfmap-{{ .name | replace "." "-" }}
