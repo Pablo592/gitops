@@ -1,3 +1,62 @@
+# Falta mejorar el formato del ingress con todas sus configuraciones
+# Agregar annotations
+# Agregar oauth
+# Agregar probes
+
+# Ver si se puede reemplazar el pipeline para crear el cliente en keycloak
+
+#Borrador/ ejemplo
+
+
+#apiVersion: apps/v1
+#kind: Deployment
+#metadata:
+#  name: mi-app
+#spec:
+#  replicas: 1
+#  selector:
+#    matchLabels:
+#      app: mi-app
+#  template:
+#    metadata:
+#      labels:
+#        app: mi-app
+#    spec:
+#      volumes:
+#        - name: token-vol
+#          emptyDir: {}
+#      initContainers:
+#        - name: generador-token
+#          image: alpine:3.19
+#          command:
+#            - sh
+#            - -c
+#            - |
+#              TOKEN="TOKEN-$(date +%s)"
+#              echo $TOKEN > /token/token.txt
+#              chmod 600 /token/token.txt
+#          volumeMounts:
+#            - name: token-vol
+#              mountPath: /token
+#      containers:
+#        - name: app-principal
+#          image: alpine:3.19
+#          command:
+#            - sh
+#            - -c
+#            - |
+#              export TOKEN=$(cat /app/token/token.txt)
+#              echo "Token en variable de entorno: $TOKEN"
+#              exec sleep 3600   # aquí iría tu app real
+#          volumeMounts:
+#            - name: token-vol
+#              mountPath: /app/token
+
+
+
+
+
+
 # Cluster donde será desplegado el proyecto
 # Puede ser 'prod', 'dev' o 'lab'
 # Default: dev
@@ -109,10 +168,10 @@ ingress:
     ingressClassName: "" # IngressClassName por defecto es 'nginx'
     hosts: # Todos los hosts apuntaran al mismo servicio
     -  host: "app"
-       annotations:
-          enabled: false
-          list:
-          kubernetes.io/tls-acme: "true"
+       #annotations:
+       #   enabled: false
+       #   list:
+       #     kubernetes.io/tls-acme: "true"
 
        #allowedIPs: 
        # - 192.168.1.1
@@ -121,10 +180,10 @@ ingress:
         #-
 
     -  host: "appi"
-       annotations:
-          enabled: false
-          list:
-          kubernetes.io/tls-acme: "true"
+       #annotations:
+       #   enabled: false
+       #   list:
+       #     kubernetes.io/tls-acme: "true"
 
        #allowedIPs: 
        # - 192.168.1.2

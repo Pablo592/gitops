@@ -14,10 +14,10 @@ metadata:
   namespace: {{ $namespace }}
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    #kubernetes.io/tls-acme: "true"
-    #nginx.ingress.kubernetes.io/affinity: cookie
-    #nginx.ingress.kubernetes.io/session-cookie-hash: index
-    #nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $name }}-k8s
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-hash: index
+    nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $name }}-k8s
     {{- if hasKey . "annotations" }}
     {{- if or .annotations (and .annotations.enabled (gt (len .annotations.list) 0)) }}
     {{- range $key, $value := .annotations.list }}
