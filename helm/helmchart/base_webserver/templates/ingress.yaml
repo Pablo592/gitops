@@ -1,23 +1,20 @@
-{{- $namespace := .Values.group | replace "." "" -}}
-{{- $name := .Values.project -}}
-{{- $port := .Values.port.port -}}
+{{- $namespace := .Values.group  | replace "." ""  -}}
+{{- $project := .Values.project -}}
+{{- $port := .Values.port -}}
 {{- $classname := .Values.ingress.ingressClassName -}}
+{{- if .Values.ingress.enabled }}
 {{- range .Values.ingress.hosts }}
+{{- if or (not (hasKey . "oauth2ProxyUsers")) (eq (len .oauth2ProxyUsers) 0) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  {{- if eq (len $.Values.ingress.hosts) 1 }}
-  name: {{ $namespace }}-{{ $name }}-ingress
-  {{- else }}
-  name: {{ $namespace }}-{{ $name }}-{{ .host | replace "." "" }}-ingress
-  {{- end }}
+  name: {{ $namespace }}-{{ $project }}-{{ .host | replace "." "" }}-ingress
   namespace: {{ $namespace }}
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     kubernetes.io/tls-acme: "true"
     nginx.ingress.kubernetes.io/affinity: cookie
     nginx.ingress.kubernetes.io/session-cookie-hash: index
-    nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $name }}-k8s
+    nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $project }}-k8s
     {{- if hasKey . "annotations" }}
     {{- if or .annotations (and .annotations.enabled (gt (len .annotations.list) 0)) }}
     {{- range $key, $value := .annotations.list }}
@@ -40,8 +37,10 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $name }}
+                name: {{ $namespace }}-{{ $project }}-service
                 port:
                   number: {{ $port }}
 ---
+{{- end }}
+{{- end }}
 {{- end }}
