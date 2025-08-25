@@ -11,9 +11,11 @@ metadata:
   name: {{ $name }}
   annotations:
     reloader.stakater.com/auto: "true"
+    {{- if .Values.annotations }}
     {{- if .Values.annotations.enabled }}
     {{- range $key, $value := .Values.annotations.list }}
     {{ $key }}: {{ $value | quote }}
+    {{- end }}
     {{- end }}
     {{- end }}
 spec:
@@ -22,11 +24,13 @@ spec:
       app: {{ $name }}
   template:
     metadata:
+      {{- if .Values.annotationsPod }}
       {{- if .Values.annotationsPod.enabled }}  
       annotations:
         {{- range $key, $value := .Values.annotationsPod.list }}
         {{ $key }}: {{ $value | quote }}
         {{- end }}
+      {{- end }}
       {{- end }}
       labels:
         app: {{ $name }}

@@ -1,0 +1,193 @@
+---
+# Source: base_webserver/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfmap-opt-map1-init-sh
+  namespace: grupo-gitlab
+data:
+  init.sh: |
+
+    #ejemplo
+    comdocII.release=3.0
+    # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
+    comdocII.server=UNC
+    # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
+    # dentro de un documento
+    comdocII.max-upload=20
+    # Link ofrecido para descargar lector de archivos PDF
+    comdocII.downloads.visor-pdf=http://adobe.com/reader
+---
+# Source: base_webserver/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: proyecto--etc-storage-pvc
+  namespace: grupo-gitlab
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: nfs-csi-nas
+---
+# Source: base_webserver/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: proyecto--etc-other-storage-pvc
+  namespace: grupo-gitlab
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-csi-nas
+---
+# Source: base_webserver/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: proyecto
+  namespace: grupo-gitlab
+  name: grupo-gitlab-proyecto-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: proyecto-80-port
+  selector:
+    app: proyecto
+---
+# Source: base_webserver/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: grupo-gitlab
+  name: proyecto
+  annotations:
+    reloader.stakater.com/auto: "true"
+    reloader.stakater.com: "true"
+    someother/annotation: "enabled"
+spec:
+  selector:
+    matchLabels:
+      app: proyecto
+  template:
+    metadata:  
+      annotations:
+        reloader.stakater.com: "true"
+        someother/annotation: "enabled"
+      labels:
+        app: proyecto
+    spec:
+      containers:
+      - name: proyecto
+        image: harbor.psi.unc.edu.ar/docker-hub/httpd:latest
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: KC_HTTPS_CERTIFICATE_FILE
+            value: "/opt/cert/tls.crt"
+          - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+            value: "/opt/key/tls.key"
+          - name: KC_HEALTH_ENABLED
+            value: "true"
+        volumeMounts:
+          - name: volume-etc-storage
+            mountPath: /etc/storage
+          - name: volume-etc-other-storage
+            mountPath: /etc/other/storage
+          - name: cfmap-init-sh
+            mountPath: /opt/map1
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2048Mi"
+      volumes:
+        - name: volume-etc-storage
+          persistentVolumeClaim:
+            claimName: proyecto--etc-storage-pvc
+        - name: volume-etc-other-storage
+          persistentVolumeClaim:
+            claimName: proyecto--etc-other-storage-pvc
+        - name: cfmap-init-sh
+          configMap:
+            name: cfmap-init-sh
+            defaultMode: 493
+---
+# Source: base_webserver/templates/hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+ name: hpa-proyecto
+ namespace: grupo-gitlab
+spec:
+ scaleTargetRef:
+   apiVersion: apps/v1
+   kind: Deployment
+   name: proyecto
+ minReplicas: 1
+ maxReplicas: 4
+ targetCPUUtilizationPercentage: 80
+---
+# Source: base_webserver/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grupo-gitlab-k8s-ejemplodevunceduar-ingress
+  namespace: grupo-gitlab
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-hash: index
+    nginx.ingress.kubernetes.io/session-cookie-name: grupo-gitlab-proyecto-k8s
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "192.168.1.1,192.168.1.2,192.168.1.3,192.168.1.4,192.168.1.5,192.168.1.6,192.168.1.7,192.168.1.8,192.168.1.9,192.168.1.10"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: k8s-ejemplo.dev.unc.edu.ar
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grupo-gitlab-proyecto-service
+                port:
+                  number: 80
+---
+# Source: base_webserver/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grupo-gitlab-k8s-ejemplo2devunceduar-ingress
+  namespace: grupo-gitlab
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-hash: index
+    nginx.ingress.kubernetes.io/session-cookie-name: grupo-gitlab-proyecto-k8s
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "192.168.1.1,192.168.1.2,192.168.1.3,192.168.1.4,192.168.1.5,192.168.1.6,192.168.1.7,192.168.1.8,192.168.1.9,192.168.1.10"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: k8s-ejemplo2.dev.unc.edu.ar
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grupo-gitlab-proyecto-service
+                port:
+                  number: 80

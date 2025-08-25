@@ -3,8 +3,6 @@
 # Agregar oauth
 # Agregar probes
 
-# Ver si se puede reemplazar el pipeline para crear el cliente en keycloak
-
 #Borrador/ ejemplo
 
 
@@ -79,20 +77,16 @@ crontab: "0 12 * * 0"
 annotations:
   enabled: true
   list:
-    - name: reloader.stakater.com/auto
-      value: "true"
-    - name: someother/annotation
-      value: enabled
+    reloader.stakater.com: "true"
+    someother/annotation: enabled
 
 
 # Annotations para el pod
 annotationsPod:
   enabled: true
   list:
-    - name: reloader.stakater.com/auto
-      value: "true"
-    - name: someother/annotation
-      value: enabled
+    reloader.stakater.com: "true"
+    someother/annotation: enabled
 
 
 
@@ -113,7 +107,6 @@ image:
 
 port:
   port: 80
-  name: http
   targetPort: 80
 
 
@@ -125,28 +118,28 @@ env:
   - name: KC_HEALTH_ENABLED
     value: "true"
 
-secrets:
-  - name: SECRET_ENV_VAR
-    path: "path/in/vault"
-    key: "key-in-vault"
-  - name: SECRET_ENV_VAR2
-    path: "path/in/vault2"
-    key: "key-in-vault2"
-
-fileFromSecret:
-    - fileName: "config.properties"
-      path: "path/in/vault"
-      secretKey: "key-in-vault"
-      mount: "/etc/config"
-    - fileName: "any.properties"
-      path: "dev/apache"
-      secretKey: "other-key-in-vault"
-      mount: "/other/mount"
-
-environmentFromSecret:
-    - path: "path/in/vault"
-    - path: "path/in/vault2"
-    - path: "path/in/vault3"
+#secrets:
+#  - name: SECRET_ENV_VAR
+#    path: "path/in/vault"
+#    key: "key-in-vault"
+#  - name: SECRET_ENV_VAR2
+#    path: "path/in/vault2"
+#    key: "key-in-vault2"
+#
+#fileFromSecret:
+#    - fileName: "config.properties"
+#      path: "path/in/vault"
+#      secretKey: "key-in-vault"
+#      mount: "/etc/config"
+#    - fileName: "any.properties"
+#      path: "dev/apache"
+#      secretKey: "other-key-in-vault"
+#      mount: "/other/mount"
+#
+#environmentFromSecret:
+#    - path: "path/in/vault"
+#    - path: "path/in/vault2"
+#    - path: "path/in/vault3"
 
 
 

@@ -1,7 +1,8 @@
 {{- $namespace := .Values.group | replace "." "" -}}
 {{- $name := .Values.project -}}
+{{- $port := .Values.port -}}
 
-{{- if .Values.ports }}
+{{- if $port }}
 
 apiVersion: v1
 kind: Service
@@ -9,16 +10,14 @@ metadata:
   labels:
     app: {{ $name }}
   namespace: {{ $namespace }}
-  name: {{ $name }}
+  name: {{ $namespace }}-{{ $name }}-service
 spec:
   type: ClusterIP
   ports:
-  {{- range .Values.ports }}
-    - port: {{ .port }}
-      targetPort: {{ .targetPort }}
+    - port: {{ $port.port }}
+      targetPort: {{ $port.targetPort }}
       protocol: TCP
-      name: {{ $name }}-{{ .port }}-port
-  {{- end }}
+      name: {{ $name }}-{{ $port.port }}-port
   selector:
     app: {{ $name }}
 

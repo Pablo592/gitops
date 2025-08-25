@@ -9,11 +9,30 @@ kind: CronJob
 metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+    {{- if .Values.annotations }}
+    {{- if .Values.annotations.enabled }}
+    {{- range $key, $value := .Values.annotations.list }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
 spec:
   schedule: {{ .Values.crontab }}
   jobTemplate:
     spec:
       template:
+
+      {{- if .Values.annotationsPod }}
+      {{- if .Values.annotationsPod.enabled }} 
+        metadata:
+          annotations:
+            {{- range $key, $value := .Values.annotationsPod.list }}
+            {{ $key }}: {{ $value | quote }}
+            {{- end }}
+      {{- end }}
+      {{- end }}
         spec:
           restartPolicy: OnFailure
           containers:

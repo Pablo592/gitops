@@ -1,6 +1,6 @@
 {{- $namespace := .Values.group  | replace "." ""  -}}
 {{- $project := .Values.project -}}
-{{- $port := .Values.port -}}
+{{- $port := .Values.port.port -}}
 {{- $classname := .Values.ingress.ingressClassName -}}
 {{- if .Values.ingress.enabled }}
 {{- range .Values.ingress.hosts }}
@@ -8,21 +8,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $namespace }}-{{ $project }}-{{ .host | replace "." "" }}-ingress
+  name: {{ $namespace }}-{{ .host | replace "." "" }}-ingress
   namespace: {{ $namespace }}
   annotations:
     kubernetes.io/tls-acme: "true"
     nginx.ingress.kubernetes.io/affinity: cookie
     nginx.ingress.kubernetes.io/session-cookie-hash: index
     nginx.ingress.kubernetes.io/session-cookie-name: {{ $namespace }}-{{ $project }}-k8s
-    {{- if hasKey . "annotations" }}
+    {{- if .annotations }}
     {{- if or .annotations (and .annotations.enabled (gt (len .annotations.list) 0)) }}
     {{- range $key, $value := .annotations.list }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
-    {{- if hasKey . "allowedIPs" }}
+    {{- if .allowedIPs }}
     {{- if ne (len .allowedIPs) 0 }}
     nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," .allowedIPs | quote }}
     {{- end }}
