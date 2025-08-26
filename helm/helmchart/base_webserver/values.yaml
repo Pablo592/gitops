@@ -69,7 +69,7 @@ group: "grupo-gitlab"
 project: "proyecto"
 owner: "owner"
 
-type: "1"  # Deployment = 1 ; CronJob = 2
+type: "2"  # Deployment = 1 ; CronJob = 2
 crontab: "0 12 * * 0"
 
 
