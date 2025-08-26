@@ -5,7 +5,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cfmap{{ .path | replace "/" "-" }}-{{ .name | replace "." "-" }}
+  name: {{ .path | replace "/" "" }}-{{ .name | replace "." "" }}
   namespace: {{ $namespace }}
 data:
   {{ .name }}: |

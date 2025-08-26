@@ -51,6 +51,22 @@
       {{- end }}
     {{- end }}
 
+  {{- if .Values.probes}}
+    {{- if .Values.probes.enabled }}
+  startupProbe:
+        httpGet:
+          path: {{ .Values.probes.startup.path }}
+          port: {{ .Values.port.port }}
+        periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+        failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+  livenessProbe:
+    httpGet:
+      path: {{ .Values.probes.liveness.path }}
+      port: {{ .Values.port.port }}
+    {{- end }}
+  {{- end }}
+
+
   {{- if .Values.resources }}
   resources:
     requests:
@@ -80,7 +96,7 @@ volumes:
     {{- range .Values.configMaps }}
   - name: cfmap-{{ .name | replace "." "-" }}
     configMap:
-      name: cfmap-{{ .name | replace "." "-" }}
+      name: {{ .path | replace "/" "" }}-{{ .name | replace "." "" }}
       defaultMode: {{ .chmod | default "0755" }}
     {{- end }}
   {{- end }}

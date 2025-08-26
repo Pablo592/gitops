@@ -9,29 +9,14 @@ kind: Deployment
 metadata:
   namespace: {{ $namespace }}
   name: {{ $name }}
-  annotations:
-    reloader.stakater.com/auto: "true"
-    {{- if .Values.annotations }}
-    {{- if .Values.annotations.enabled }}
-    {{- range $key, $value := .Values.annotations.list }}
-    {{ $key }}: {{ $value | quote }}
-    {{- end }}
-    {{- end }}
-    {{- end }}
+  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations) | nindent 2 }}
 spec:
   selector:
     matchLabels:
       app: {{ $name }}
   template:
     metadata:
-      {{- if .Values.annotationsPod }}
-      {{- if .Values.annotationsPod.enabled }}  
-      annotations:
-        {{- range $key, $value := .Values.annotationsPod.list }}
-        {{ $key }}: {{ $value | quote }}
-        {{- end }}
-      {{- end }}
-      {{- end }}
+      {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod) | nindent 6 }}
       labels:
         app: {{ $name }}
     spec:
