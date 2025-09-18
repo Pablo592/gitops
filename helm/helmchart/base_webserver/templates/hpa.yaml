@@ -1,22 +1,20 @@
 {{- $namespace := .Values.group | replace "." "" -}}
 {{- $name := .Values.project -}}
 
-{{- if .Values.hpa }}
+{{- if and .Values.hpa .Values.hpa.enabled }}
+  {{- if eq (.Values.type | lower) "deployment" }}
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
 metadata:
- name: hpa-{{ $name }}
- namespace: {{ $namespace }}
+  name: hpa-{{ $name }}
+  namespace: {{ $namespace }}
 spec:
- scaleTargetRef:
-   apiVersion: apps/v1
-   {{- if eq (int (default 1 .Values.type)) 1 }}
-   kind: Deployment
-   {{- else if eq (int .Values.type) 2 }}
-   kind: CronJob
-   {{- end }}
-   name: {{ $name }}
- minReplicas: {{ .Values.hpa.minReplicas }}
- maxReplicas: {{ .Values.hpa.maxReplicas }}
- targetCPUUtilizationPercentage: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  targetCPUUtilizationPercentage: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+  {{- end }}
 {{- end }}

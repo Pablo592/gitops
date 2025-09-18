@@ -1,25 +1,70 @@
 {{- $namespace := .Values.group | replace "." "" -}}
+{{- $nameInit := printf "%s-init" .Values.project -}}
 {{- $name := .Values.project -}}
-{{- $ctx := dict "name" $name "Values" .Values "namespace" $namespace -}}
+{{- $ctx := dict "name" $name "Values" .Values "namespace" $namespace "imageName" .Values.image.name "imageTag" .Values.image.tag -}}
+{{- if and .Values.command .Values.command.enabled }}
+  {{- $_ := set $ctx "command" .Values.command -}}
+  {{- $_ := set $ctx "commandEnabled" .Values.command.enabled -}}
+{{- end }}
 
-{{- if eq (.Values.type) "1" -}}
+
+{{- if eq (.Values.type | lower) "deployment" -}}
+
+  {{- if and .Values.rollout .Values.rollout.enabled }}
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  namespace: {{ $namespace }}
+  name: {{ $name }}
+  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
+spec:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {} # Manual promotion
+        - setWeight: 40
+        - pause: {duration: 10s} # Automated pause
+        - setWeight: 60
+        - pause: {duration: 10s}
+        - setWeight: 80
+        - pause: {duration: 10s}
+
+    {{- else }}
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: {{ $namespace }}
   name: {{ $name }}
-  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations) | nindent 2 }}
+  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
 spec:
+  replicas: 1
+
+  {{- end }}
+
   selector:
     matchLabels:
       app: {{ $name }}
   template:
     metadata:
-      {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod) | nindent 6 }}
+      {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 6 }}
       labels:
         app: {{ $name }}
     spec:
+      {{- if and .Values.hostAliases .Values.hostAliases.enabled }}
+      hostAliases:
+        {{- toYaml .Values.hostAliases.aliases | nindent 8 }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ $namespace }}-{{ $name }}-harbor-secret
+{{- if and .Values.initContainer .Values.initContainer.enabled }}
+      initContainers:
+{{- $ctxInit := dict "name" $nameInit "Values" .Values "namespace" $namespace "command" .Values.initContainer.command "commandEnabled" .Values.initContainer.enabled "imageName" "harbor.com.ar/docker-hub/alpine" "imageTag" "latest" -}}
+{{- include "base_webserver.deploy-body" $ctxInit | nindent 6 }}
+{{- end }}
       containers:
 {{- include "base_webserver.deploy-body" $ctx | nindent 6 }}
+{{- include "base_webserver.deploy-volume" $ctx | nindent 6 }}
 {{- end }}

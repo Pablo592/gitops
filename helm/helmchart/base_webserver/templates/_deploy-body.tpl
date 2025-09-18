@@ -1,71 +1,103 @@
 {{- define "base_webserver.deploy-body" -}}
 - name: {{ .name }}
-  image: {{ .Values.image.name }}:{{ .Values.image.tag }}
+  image: {{ .imageName }}:{{ .imageTag }}
   imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
 
-  {{- if .Values.command }}
+  {{- if .command }}
+  {{- if .commandEnabled }}
   command:
-    - "{{ .Values.command.container_shell }}"
+    - "{{ .command.container_shell }}"
     - "-c"
   args:
-  {{- toYaml .Values.command.args | nindent 4 }}
-
+{{ toYaml .command.args | nindent 4 }}
+  {{- end }}
   {{- end }}
 
-    {{- if .Values.ports }}
+  {{- if .Values.ports }}
   ports:
     - name: {{ .name }}
       containerPort: {{ .targetPort }}
-    {{- end }}
+  {{- end }}
 
-
-    {{- if .Values.env }}
+  {{- if or (and .Values.env .Values.env.enabled) (and .Values.secrets .Values.secrets.enabled) }}
   env:
-      {{- range .Values.env }}
+    {{- if and .Values.env .Values.env.enabled .Values.env.list }}
+    {{- range .Values.env.list }}
     - name: {{ .name }}
       value: {{ .value | quote }}
-      {{- end }}
+    {{- end }}
     {{- end }}
 
-    {{- if .Values.environmentFromSecret }}
+    {{- if and .Values.secrets .Values.secrets.enabled .Values.secrets.list }}
+    {{- range .Values.secrets.list }}
+      {{- $secretName := include "base_webserver.sanitizeName" (printf "%s-secret" .path )}}
+    - name: {{ .name }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ $secretName }}
+          key: {{ .key }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+
+  {{- if and .Values.environmentFromSecret .Values.environmentFromSecret.enabled .Values.environmentFromSecret.list }}
   envFrom:
-      {{- range .Values.environmentFromSecret }}
+    {{- range .Values.environmentFromSecret.list }}
+      {{- $secretBase := include "base_webserver.sanitizeName" (printf "%s-secret" .path) }}
     - secretRef:
-        name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-secret
-      {{- end }}
+        name: {{ $secretBase }}
     {{- end }}
-    {{- if or .Values.volumes .Values.configMaps .Values.fileFromSecret }}
+  {{- end }}
+
+  {{- if or (and .Values.volumes .Values.volumes.enabled) 
+            (and .Values.configMaps .Values.configMaps.enabled) 
+            (and .Values.fileFromSecret .Values.fileFromSecret.enabled) }}
   volumeMounts:
-      {{- range .Values.volumes }}
-    - name: volume{{ .mount | replace "/" "-" }}
-      mountPath: {{ .mount }}
-      {{- end }}
-      {{- range .Values.configMaps }}
-    - name: cfmap-{{ .name | replace "." "-" }}
-      mountPath: {{ .path }}
-      {{- end }}
-      {{- range .Values.fileFromSecret }}
-    - name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-{{ .secretKey | replace "/" "-" }}
-      mountPath: {{ .mount }}
-      readOnly: true
+    {{- if and .Values.volumes .Values.volumes.enabled .Values.volumes.list }}
+      {{- range $vol := .Values.volumes.list }}
+        {{- $mountsJoined := join "-" $vol.mounts }}
+        {{- $volName := include "base_webserver.sanitizeName" (printf "%s-%s-%s-pvc" $.Values.project $mountsJoined $vol.size) }}
+        {{- range $mount := $vol.mounts }}
+    - name: {{ $volName }}
+      subPath: {{ base $mount }}
+      mountPath: {{ $mount }}
+        {{- end }}
       {{- end }}
     {{- end }}
 
-  {{- if .Values.probes}}
-    {{- if .Values.probes.enabled }}
+    {{- if and .Values.configMaps .Values.configMaps.enabled .Values.configMaps.list }}
+      {{- range .Values.configMaps.list }}
+        {{- $cmName := include "base_webserver.sanitizeName" (printf "cfmap-%s-%s" .path .name) }}
+    - name: {{ $cmName }}
+      mountPath: {{ .path }}/{{ .name }}
+      subPath: {{ .name }}
+      {{- end }}
+    {{- end }}
+
+  {{- if and .Values.fileFromSecret .Values.fileFromSecret.enabled .Values.fileFromSecret.list }}
+    {{- range .Values.fileFromSecret.list }}
+      {{- $volName := include "base_webserver.sanitizeName" (printf "%s-%s-%s" .path .secretKey .fileName) }}
+    - name: {{ $volName }}
+      mountPath: {{ .mount }}/{{ .fileName }}
+      subPath: {{ .fileName }}
+      readOnly: true
+    {{- end }}
+  {{- end }}
+  {{- end }}
+
+  {{- if and .Values.probes .Values.probes.enabled }}
   startupProbe:
-        httpGet:
-          path: {{ .Values.probes.startup.path }}
-          port: {{ .Values.port.port }}
-        periodSeconds: {{ .Values.probes.startup.periodSeconds }}
-        failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+    httpGet:
+      path: {{ .Values.probes.startup.path }}
+      port: {{ .Values.port.port }}
+    periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+    failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+
   livenessProbe:
     httpGet:
       path: {{ .Values.probes.liveness.path }}
       port: {{ .Values.port.port }}
-    {{- end }}
   {{- end }}
-
 
   {{- if .Values.resources }}
   resources:
@@ -75,29 +107,5 @@
     limits:
       cpu: {{ .Values.resources.limits.cpu | quote }}
       memory: {{ .Values.resources.limits.memory | quote }}
-  {{- end }}
-
-  {{- if or .Values.volumes .Values.configMaps .Values.fileFromSecret }}
-volumes:
-    {{- range .Values.volumes }}
-  - name: volume{{ .mount | replace "/" "-" }}
-    persistentVolumeClaim:
-      claimName: {{ $.name }}-{{ .mount | replace "/" "-" }}-pvc
-    {{- end }}
-    
-    {{- range .Values.fileFromSecret }}
-  - name: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-{{ .secretKey | replace "/" "-" }}
-    secret:
-      secretName: {{ .path | trimPrefix "/" | replace "/" "-" | replace "_" "-" | lower }}-secret
-      items:
-       - key: {{ .secretKey }}
-         path: {{ .fileName }}
-    {{- end }}
-    {{- range .Values.configMaps }}
-  - name: cfmap-{{ .name | replace "." "-" }}
-    configMap:
-      name: {{ .path | replace "/" "" }}-{{ .name | replace "." "" }}
-      defaultMode: {{ .chmod | default "0755" }}
-    {{- end }}
   {{- end }}
 {{- end }}

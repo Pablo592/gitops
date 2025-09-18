@@ -1,0 +1,233 @@
+{{- if and .Values.port .Values.ingress .Values.ingress.enabled }}
+{{- $timestamp := now | unixEpoch | toString | sha256sum | trunc 8 }}
+{{- $classname := .Values.ingress.ingressClassName -}}
+{{- $cluster := .Values.cluster  -}}
+{{- $namespace := .Values.group  | replace "." "" -}}
+{{- $name := .Values.project -}}
+{{- $area := .Values.area -}}
+{{- $service_port := .Values.port.port -}}
+
+# Evaluar si hay usuarios en oauth2ProxyUsers para algún host
+{{- $hasOauthUsers := false }}
+{{- range .Values.ingress.hosts }}
+  {{- if .oauth2ProxyUsers }}
+    {{- if gt (len .oauth2ProxyUsers) 0 }}
+      {{- $hasOauthUsers = true }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# Creación de recursos de Deployment y Service solo si $hasOauthUsers es true
+{{- if and .Values.ingress.enabled $hasOauthUsers }}
+{{- range $host := .Values.ingress.hosts }}
+
+  {{- if $host.oauth2ProxyUsers }}
+  {{- if ne (len $host.oauth2ProxyUsers) 0 }}
+
+  {{- $filteredName := include "base_webserver.sanitizeName" (printf "oauth-%s%s" $cluster $host.host) }}
+  {{- $filteredSecret := include "base_webserver.sanitizeName" (printf "%s%s-%s-vss" $cluster $host.host $timestamp) }}
+
+# Deployment para oauth-proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ $filteredName }}
+  namespace: {{ $namespace }}
+  name: {{ $filteredName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $filteredName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $filteredName }}
+    spec:
+      containers:
+      - name: oauth-proxy
+        image: "quay.io/oauth2-proxy/oauth2-proxy:v7.6.0"
+        env:
+          - name: OAUTH2_PROXY_HTTP_ADDRESS
+            value: "http://:4180"
+          - name: OAUTH2_PROXY_EMAIL_DOMAINS
+            value: "*"
+          - name: OAUTH2_PROXY_PROVIDER
+            value: "keycloak-oidc"
+          - name: OAUTH2_PROXY_PROVIDER_DISPLAY_NAME
+            value: "Keycloak"
+          - name: OAUTH2_PROXY_CLIENT_ID
+            value: "{{ $namespace }}-{{ $cluster }}-{{ $host.host | replace "." "" }}"
+          - name: OAUTH2_PROXY_ALLOWED_ROLES
+            value: "{{ $namespace }}-{{ $cluster }}-{{ $host.host | replace "." "" }}:{{ $namespace }}-{{ $cluster }}-{{ $host.host | replace "." "" }}"
+          - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+            value: "https://keycloak.com.ar/realms/desarrollo"
+          - name: OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL
+            value: "true"
+          - name: OAUTH2_PROXY_SSL_UPSTREAM_INSECURE_SKIP_VERIFY
+            value: "true"
+          - name: OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS
+            value: "true"
+          - name: OAUTH2_PROXY_PASS_ACCESS_TOKEN
+            value: "true"
+          - name: OAUTH2_PROXY_SKIP_PROVIDER_BUTTON
+            value: "true"
+          - name: OAUTH2_PROXY_COOKIE_NAME
+            value: "SESSION"
+          - name: OAUTH2_PROXY_COOKIE_SAMESITE
+            value: "lax"
+          - name: OAUTH2_PROXY_SESSION_STORE_TYPE
+            value: "redis"
+          - name: OAUTH2_PROXY_REDIS_CONNECTION_URL
+            value: "redis://redis-service:6379"
+          - name: OAUTH2_PROXY_COOKIE_SECURE
+            value: "false"
+          - name: OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST
+            value: "true"
+          - name: OAUTH2_PROXY_COOKIE_CSRF_EXPIRE
+            value: "5m"
+          - name: OAUTH2_PROXY_COOKIE_REFRESH
+            value: "5m"
+          - name: OAUTH2_PROXY_COOKIE_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ $filteredSecret }}
+                key: COOKIE_SECRET
+          - name: OAUTH2_PROXY_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ $filteredSecret }}
+                key: CLIENT_SECRET-{{ $namespace }}-{{ $cluster }}-{{ $host.host | replace "." "" }}
+          - name: OAUTH2_PROXY_UPSTREAMS
+            value: "http://{{ $namespace }}-{{ $name }}-service.{{ $namespace }}.svc.cluster.local:{{ $service_port }}"
+          - name: OAUTH2_PROXY_REDIRECT_URL
+            value: "https://{{ $host.host }}/oauth2/callback"
+        resources:
+          limits:
+            cpu: "15m"
+            memory: "30Mi"
+          requests:
+            cpu: "2m"
+            memory: "15Mi"
+
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: {{ $filteredSecret }}
+  namespace: {{ $namespace }}
+spec:
+  type: kv-v2
+  mount: k8secrets
+  path: {{ $cluster }}/deploy-oauth/secrets
+  destination:
+    name: {{ $filteredSecret }}
+    create: true
+  refreshAfter: 24h
+  vaultAuthRef: {{ $name }}-auth
+
+
+---
+# Service para oauth-proxy
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ $filteredName }}
+  namespace: {{ $namespace }}
+  name: {{ $filteredName }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 4180
+      protocol: TCP
+      name: web
+  selector:
+    app: {{ $filteredName }}
+
+---
+
+# Ingress para oauth-proxy
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $namespace }}-{{ .host | replace "." "" }}-ingress
+  namespace: {{ $namespace }}
+    {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .annotations "area" $area) | nindent 2 }}
+        {{- if .allowedIPs }}
+          {{- if ne (len .allowedIPs) 0 }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," .allowedIPs | quote }}
+          {{- end }}
+        {{- end }}
+spec:
+  ingressClassName: {{ $classname | default "nginx" }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $filteredName }}
+                port:
+                  number: 8080
+
+---
+
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+
+{{- if and .Values.port .Values.ingress.enabled $hasOauthUsers }}
+
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: {{ $namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: harbor.com.ar/docker-hub/redis:latest
+          ports:
+            - containerPort: 6379
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
+          command: ["redis-server"]
+          args: ["--save", "", "--appendonly", "no"]
+
+---
+
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: {{ $namespace }}
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+
+{{- end }}
+{{- end }}

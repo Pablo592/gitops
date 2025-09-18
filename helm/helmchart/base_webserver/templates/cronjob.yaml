@@ -1,28 +1,28 @@
 {{- $namespace := .Values.group | replace "." "" -}}
 {{- $name := .Values.project -}}
-{{- $ctx := dict "name" $name "Values" .Values "namespace" $namespace -}}
+{{- $ctx := dict "name" $name "Values" .Values "namespace" $namespace "imageName" .Values.image.name "imageTag" .Values.image.tag -}}
+{{- if and .Values.command .Values.command.enabled }}
+  {{- $_ := set $ctx "command" .Values.command -}}
+  {{- $_ := set $ctx "commandEnabled" .Values.command.enabled -}}
+{{- end }}
+{{- if eq (.Values.type | lower) "cronjob" -}}
 
-{{- if eq .Values.type "2" }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
-  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations) | nindent 2 }}
+  {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
 spec:
   schedule: {{ .Values.crontab }}
   jobTemplate:
     spec:
       template:
         metadata:
-          {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod) | nindent 10 }}
+      {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 10 }}
         spec:
           restartPolicy: OnFailure
           containers:
-            {{- include "base_webserver.deploy-body" $ctx | nindent 12 }}
-        spec:
-          restartPolicy: OnFailure
-          containers:
-
 {{- include "base_webserver.deploy-body" $ctx | nindent 10 }}
+{{- include "base_webserver.deploy-volume" $ctx | nindent 10 }}
 {{- end }}

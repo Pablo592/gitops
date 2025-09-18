@@ -1,14 +1,15 @@
 {{- $name := .Values.project -}}
 {{- $namespace := .Values.group | replace "." "" -}}
 
-{{- if .Values.volumes }}
-{{- range $index, $vol := .Values.volumes }}
+{{- if and .Values.volumes .Values.volumes.enabled .Values.volumes.list }}
+  {{- range $vol := .Values.volumes.list }}
+    {{- $mountsJoined := join "-" $vol.mounts }}
+    {{- $volName := include "base_webserver.sanitizeName" (printf "%s-%s-%s-pvc" $.Values.project $mountsJoined $vol.size) }}
 
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ $name }}-{{ $vol.mount | replace "/" "-" }}-pvc
+  name: {{ $volName }}
   namespace: {{ $namespace }}
 spec:
   accessModes:
@@ -16,7 +17,12 @@ spec:
   resources:
     requests:
       storage: {{ $vol.size | default "1Gi" }}
-  storageClassName: nfs-csi-nas
+  {{- if $vol.retain }}
+  storageClassName: nfs-csi-nas-rocky-retain 
+  {{- else }}
+  storageClassName: nfs-csi-nas-rocky
+  {{- end }}
 
-{{- end }}
+---
+  {{- end }}
 {{- end }}

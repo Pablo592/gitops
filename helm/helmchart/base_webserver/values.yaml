@@ -1,81 +1,32 @@
-# Falta mejorar el formato del ingress con todas sus configuraciones
-# Agregar annotations
-# Agregar oauth
-# Agregar probes
-
-#Borrador/ ejemplo
-
-
-#apiVersion: apps/v1
-#kind: Deployment
-#metadata:
-#  name: mi-app
-#spec:
-#  replicas: 1
-#  selector:
-#    matchLabels:
-#      app: mi-app
-#  template:
-#    metadata:
-#      labels:
-#        app: mi-app
-#    spec:
-#      volumes:
-#        - name: token-vol
-#          emptyDir: {}
-#      initContainers:
-#        - name: generador-token
-#          image: alpine:3.19
-#          command:
-#            - sh
-#            - -c
-#            - |
-#              TOKEN="TOKEN-$(date +%s)"
-#              echo $TOKEN > /token/token.txt
-#              chmod 600 /token/token.txt
-#          volumeMounts:
-#            - name: token-vol
-#              mountPath: /token
-#      containers:
-#        - name: app-principal
-#          image: alpine:3.19
-#          command:
-#            - sh
-#            - -c
-#            - |
-#              export TOKEN=$(cat /app/token/token.txt)
-#              echo "Token en variable de entorno: $TOKEN"
-#              exec sleep 3600   # aquí iría tu app real
-#          volumeMounts:
-#            - name: token-vol
-#              mountPath: /app/token
-
-
-
-
-
-
 # Cluster donde será desplegado el proyecto
 # Puede ser 'prod', 'dev' o 'lab'
 # Default: dev
-cluster: "prod"
+cluster: "dev"
 
 # Especificar la version del chart a utilizar
-chart_version: "1.0.0"
+chart_version: "4.3.0"
 
 # 'group' será utilizado como el namespace de Kubernetes
 # 'project' será utilizado como el nombre de recursos
-group: "grupo-gitlab"
-project: "proyecto"
-owner: "owner"
+group: "apache"
+project: "apache"
+area: "psi"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
 
-type: "1"  # Deployment = 1 ; CronJob = 2
+type: "Deployment"  #Deployment; CronJob
 crontab: "0 12 * * 0"
+
+
+# Habilitar Argo Rollouts en lugar de Deployment
+# Se va levantando de a poco la nueva versión de la app
+# y se van bajando las réplicas de la versión anterior
+# Permite hacer rollbacks más fácilmente
+rollout:
+  enabled: false
 
 
 # Annotations para el deployment/ CronJob
 annotations:
-  enabled: true
+  enabled: false
   list:
     reloader.stakater.com: "true"
     someother/annotation: enabled
@@ -83,7 +34,7 @@ annotations:
 
 # Annotations para el pod
 annotationsPod:
-  enabled: true
+  enabled: false
   list:
     reloader.stakater.com: "true"
     someother/annotation: enabled
@@ -99,20 +50,34 @@ hostAliases:
      hostnames:
      - "service.local"
 
+  # El initContainer se ejecuta antes que el contenedor principal
+  # El mismo tiene montados los mismos volúmenes, secretos y configmaps 
+  # que el contenedor principal
+  # La diferencia es que no hay una app ejecutandose en el mismo.
+  # Puede ser utilizado para realizar modificaciones antes de que la aplicación se ejecute
+
+initContainer:
+    enabled: false
+    command:
+      container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
+      args:
+        - |
+          echo "initContainer"
 
 image:
-  name: "harbor.psi.unc.edu.ar/docker-hub/httpd"
-  tag: "latest"
+  name: "harbor.com.ar/docker-hub/httpd"
+  tag: "alpine"
   pullPolicy: IfNotPresent # Puede ser 'Always', 'IfNotPresent' o 'Never'
 
 command:
+  enabled: false
   container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
   args:
     - |
       echo "Ejecutando comando"
       echo "Hola Mundo"
       #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
-      sleep infinity
+      #sleep infinity
 
 
 port:
@@ -121,43 +86,60 @@ port:
 
 
 env:
-  - name: KC_HTTPS_CERTIFICATE_FILE
-    value: /opt/cert/tls.crt 
-  - name: KC_HTTPS_CERTIFICATE_KEY_FILE
-    value: /opt/key/tls.key  
-  - name: KC_HEALTH_ENABLED
-    value: "true"
+  enabled: false
+  list:
+    - name: KC_HTTPS_CERTIFICATE_FILE
+      value: /opt/cert/tls.crt 
+    - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+      value: /opt/key/tls.key  
+    - name: KC_HEALTH_ENABLED
+      value: "true"
 
-#secrets:
-#  - name: SECRET_ENV_VAR
-#    path: "path/in/vault"
-#    key: "key-in-vault"
-#  - name: SECRET_ENV_VAR2
-#    path: "path/in/vault2"
-#    key: "key-in-vault2"
-#
-#fileFromSecret:
-#    - fileName: "config.properties"
-#      path: "path/in/vault"
-#      secretKey: "key-in-vault"
-#      mount: "/etc/config"
-#    - fileName: "any.properties"
-#      path: "dev/apache"
-#      secretKey: "other-key-in-vault"
-#      mount: "/other/mount"
-#
-#environmentFromSecret:
-#    - path: "path/in/vault"
-#    - path: "path/in/vault2"
-#    - path: "path/in/vault3"
+secrets:
+  enabled: false
+  list:
+    - name: AUTH_JWT_SECRET
+      path: "dev/sigeva/sigeva-api"
+      key: "AUTH_JWT_SECRET"
+    - name: DB_PASSWORD
+      path: "dev/sigeva/sigeva-api"
+      key: "DB_PASSWORD"
+    - name: DATABASE_DRIVER
+      path: "dev/ojs"
+      key: "DATABASE_DRIVER"
 
+fileFromSecret:
+  enabled: false
+  list:
+    - fileName: "config.properties"
+      path: "dev/sigeva/sigeva-api"
+      secretKey: "AUTH_JWT_SECRET"
+      mount: "/etc/config"
+    - fileName: "any.properties"
+      path: "dev/ojs"
+      secretKey: "DATABASE_DRIVER"
+      mount: "/other/mount"
+
+environmentFromSecret:
+  enabled: false
+  list:
+    - path: "dev/soporte_faud/databases"
+    - path: "dev/longhorn-system/backup-target-minio"
 
 
 volumes:
-  - size: 5Gi
-    mount: /etc/storage
-  - size: 10Gi
-    mount: /etc/other/storage
+  enabled: false
+  list:
+    - size: 5Gi
+      retain: false # puede ser false o true. Si es true, el PVC no se borra al eliminar el deployment
+      mounts: 
+        - /etc/other/storage
+        - /var/lib/other
+    - size: 10Gi
+      retain: false  # puede ser false o true. Si es true, el PVC no se borra al eliminar el deployment
+      mounts: 
+        - /etc/other/almacenaje
+        - /var/lib/otro
 
 resources:
   requests:
@@ -168,72 +150,57 @@ resources:
     memory: "2048Mi"
 
 configMaps:
-  - name: init.sh
-    data: |
-          #ejemplo
-          comdocII.release=3.0
-          # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
-          comdocII.server=UNC
-          # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
-          # dentro de un documento
-          comdocII.max-upload=20
-          # Link ofrecido para descargar lector de archivos PDF
-          comdocII.downloads.visor-pdf=http://adobe.com/reader
-    path: /opt/map1
-    chmod: 0755
+  enabled: false
+  list:
+    - name: init.sh
+      data: |
+            #ejemplo
+            comdocII.release=3.0
+            # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
+            comdocII.server=UNC
+            # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
+            # dentro de un documento
+            comdocII.max-upload=20
+            # Link ofrecido para descargar lector de archivos PDF
+            comdocII.downloads.visor-pdf=http://adobe.com/reader
+      path: /opt/map1
+      chmod: 0755
 
 hpa:
+  enabled: false
   minReplicas: 1
-  maxReplicas: 4
+  maxReplicas: 1
   targetCPUUtilizationPercentage: 80
 
 
 # Ingress
 ingress:
-    enabled: true
+    enabled: false
     ingressClassName: "" # IngressClassName por defecto es 'nginx'
     hosts: # Todos los hosts apuntaran al mismo servicio
-    -  host: "k8s-ejemplo.dev.unc.edu.ar"
+    -  host: "k8s-ejemplo3.com.ar"
        annotations:
-          enabled: true
+          enabled: false
           list:
             nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-       oauth2ProxyUsers: []
-          #- nombre.apellido@unc.edu.ar
+       oauth2ProxyUsers: 
+        #  - nombre.apellido@gmail.com
 
        allowedIPs: 
-        - 192.168.1.1
-        - 192.168.1.2
-        - 192.168.1.3
-        - 192.168.1.4
-        - 192.168.1.5
-        - 192.168.1.6
-        - 192.168.1.7
-        - 192.168.1.8
-        - 192.168.1.9
-        - 192.168.1.10
+        #- 172.16.59.65
         #-
         #-
         #-
 
-    -  host: "k8s-ejemplo2.dev.unc.edu.ar"
+    -  host: "k8s-ejemplo4.com.ar"
        annotations:
-          enabled: true
+          enabled: false
           list:
             nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-       oauth2ProxyUsers: []
-          #- nombre.apellido@unc.edu.ar
+       oauth2ProxyUsers: 
+        #  - nombre.apellido@gmail.com
        allowedIPs:
-        - 192.168.1.1
-        - 192.168.1.2
-        - 192.168.1.3
-        - 192.168.1.4
-        - 192.168.1.5
-        - 192.168.1.6
-        - 192.168.1.7
-        - 192.168.1.8
-        - 192.168.1.9
-        - 192.168.1.10
+        #- 172.16.59.65
         #-
         #-
         #-
@@ -243,7 +210,7 @@ ingress:
 # Probes
 probes:
   # Habilitar para que se realicen 'probes' sobre los contenedores
-  enabled: true
+  enabled: false
   # URL para verificar que la aplicación está lista para recibir tráfico
   startup:
     # Por defecto, se realiza la prueba cada 2 segundos en el path /test

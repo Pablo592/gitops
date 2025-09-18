@@ -1,14 +1,16 @@
 {{- $namespace := .Values.group | replace "." "" -}}
 {{- $name := .Values.project -}}
 
-{{- range .Values.configMaps }}
+{{- if and .Values.configMaps .Values.configMaps.enabled .Values.configMaps.list }}
+  {{- range .Values.configMaps.list }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .path | replace "/" "" }}-{{ .name | replace "." "" }}
+  name: {{ include "base_webserver.sanitizeName" (printf "%s-%s" .path .name) }}
   namespace: {{ $namespace }}
 data:
   {{ .name }}: |
 {{ .data | nindent 4 }}
 ---
+  {{- end }}
 {{- end }}
