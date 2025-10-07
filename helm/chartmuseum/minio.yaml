@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: chartmuseum
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: pablogrio/minio:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - minio server /data --console-address :9090
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: ui
+              containerPort: 9090
+          env:
+            - name: MINIO_ROOT_USER
+              value: admin
+            - name: MINIO_ROOT_PASSWORD
+              value: password123
+          volumeMounts:
+            - mountPath: "/data"
+              name: volumen
+      volumes:
+        - name: volumen
+          persistentVolumeClaim:
+            claimName: pvc-minio
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-minio
+  namespace: chartmuseum
+spec:
+  accessModes:
+    - ReadWriteMany  # In this example, multiple Pods consume the same PVC.
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-csi-nas
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: chartmuseum
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+    - name: ui
+      protocol: TCP
+      port: 9090
+      targetPort: 9090

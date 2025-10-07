@@ -1,6 +1,7 @@
 resources:
 - secret.yaml
 - helmchart-ui.yaml
+- minio.yaml
 
 generators:
 - helmchart.yaml
