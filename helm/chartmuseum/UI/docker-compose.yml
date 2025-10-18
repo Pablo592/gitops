@@ -1,7 +1,0 @@
-services:
-  gui:
-    image: moreillon/chartmuseum-gui:latest
-    environment:
-      PUBLIC_CHARTMUSEUM_URL: http://chartmuseum:8080
-    ports:
-      - 3000:3000
