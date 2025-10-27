@@ -3,42 +3,206 @@
 # Default: dev
 cluster: "dev"
 
-# Especificar la version del chart a utilizar
+# Especificar la versión del chart a utilizar
 chart_version: "4.3.0"
 
 # 'group' será utilizado como el namespace de Kubernetes
-# 'project' será utilizado como el nombre de recursos
-group: "apache"
-project: "apache"
+# 'project' será utilizado como el nombre de los recursos
+group: "grupo-gitlab"
+project: "proyecto"
 area: "psi"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
 
-type: "Deployment"  #Deployment; CronJob
-crontab: "0 12 * * 0"
+# Tipo de recurso principal que se desplegará
+# Puede ser un Deployment (aplicación que corre continuamente)
+# o un CronJob (tarea programada que corre periódicamente)
+
+type: "Deployment" #CronJob
+crontab: "0 12 * * 0"  # Cron expression utilizada solo si type es CronJob
+
+# Imagen del contenedor a desplegar
+image:
+  name: image.repository.com/grupo/proyecto  # Ruta completa del repositorio de la imagen
+  tag:  XX  # Versión o tag de la imagen
+  pullPolicy: IfNotPresent  # Política de descarga (Always, IfNotPresent, Never)
+
+# Comando personalizado a ejecutar al iniciar el contenedor
+# Si se desactiva, el contenedor usa el comando por defecto de la imagen
+command:
+  enabled: false
+  container_shell: "/bin/sh" # Shell del contenedor
+  args:
+    - |
+      echo "Ejecutando comando"
+      echo "Hola Mundo"
+      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
+      #sleep infinity
+
+# Variables de entorno estándar (env)
+env:
+  enabled: false
+  list:
+    #- name: KC_HTTPS_CERTIFICATE_FILE
+    #  value: /opt/cert/tls.crt 
+    #- name: KC_HTTPS_CERTIFICATE_KEY_FILE
+    #  value: /opt/key/tls.key  
+
+# Variables de entorno obtenidas desde secretos almacenados en Vault
+secrets:
+  enabled: false
+  list:
+    #- name: AUTH_JWT_SECRET
+    #  path: "dev/sigeva/sigeva-api"
+    #  key: "AUTH_JWT_SECRET"
+    #- name: DB_PASSWORD
+    #  path: "dev/sigeva/sigeva-api"
+    #  key: "DB_PASSWORD"
+
+# Montar secretos como archivos en rutas específicas dentro del contenedor
+fileFromSecret:
+  enabled: false
+  list:
+    #- fileName: "config.properties"
+    #  path: "dev/sigeva/sigeva-api"
+    #  secretKey: "AUTH_JWT_SECRET"
+    #  mount: "/etc/config"
+
+# Montar todos los secretos de un path de Vault como variables de entorno
+environmentFromSecret:
+  enabled: false
+  list:
+    #- path: "dev/soporte_faud/databases"
+    #- path: "dev/longhorn-system/backup-target-minio"
+
+# Configuración de puertos del docker
+port:
+  port: 80
+  targetPort: 80
+
+# ConfigMaps a montar dentro del pod (por ejemplo scripts o archivos de configuración)
+configMaps:
+  enabled: false
+  list:
+    - name: init.sh
+      data: |
+            #ejemplo
+            comdocII.release=3.0
+            comdocII.server=UNC
+            comdocII.max-upload=20
+            comdocII.downloads.visor-pdf=http://adobe.com/reader
+      path: /opt/map1   # Ruta donde se montará el archivo
+      chmod: 0755       # Permisos del archivo
+
+# Configuración de Ingress (acceso HTTP externo al servicio)
+ingress:
+    enabled: false
+    ingressClassName: "" # Clase de ingress (por defecto nginx)
+    hosts:
+    -  host: "k8s-ejemplo3.dev.com"
+       annotations:
+          enabled: false
+          list:
+            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+       allowedIPs: 
+        #- 172.16.59.65
 
 
-# Habilitar Argo Rollouts en lugar de Deployment
-# Se va levantando de a poco la nueva versión de la app
-# y se van bajando las réplicas de la versión anterior
-# Permite hacer rollbacks más fácilmente
+#    -  host: "k8s-ejemplo4.dev.com"
+#       annotations:
+#          enabled: false
+#          list:
+#            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+#       allowedIPs:
+#        - 172.16.59.65
+#        -
+#        -
+#        -
+
+
+
+
+# Escalado automático (HPA)
+# Ajusta la cantidad de réplicas según el uso de CPU
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+
+# Para permitir la ejecucion de un docker con el usuario root
+allowExecutionWithRoot:
+  enabled: false
+
+# Definición de volúmenes persistentes (PVC)
+volumes:
+  enabled: false
+  list:
+    #- size: 5Gi
+    #  retain: false  # Si es true, el PVC no se borra al eliminar el deployment
+    #  mounts: 
+    #    - /etc/other/storage
+    #    - /var/lib/other
+
+# Recursos asignados al contenedor (CPU y memoria)
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2048Mi"
+
+# Configuración de sondas HTTP (probes) para la aplicación.
+# Permiten a Kubernetes monitorear el estado del contenedor.
+
+probes:
+  # Activa o desactiva el uso de probes en el deployment.
+  enabled: false
+
+  # --- STARTUP PROBE ---
+  # Verifica que la aplicación arranque correctamente antes de habilitar
+  # las demás sondas (liveness/readiness). Si esta falla repetidamente,
+  # Kubernetes reinicia el contenedor.
+  startup:
+    # Endpoint HTTP que se consulta para validar el arranque.
+    path: /test
+    # Intervalo (en segundos) entre cada verificación.
+    periodSeconds: 10
+    # Número máximo de fallos permitidos antes de marcar el contenedor como fallido.
+    failureThreshold: 5
+
+  # --- LIVENESS PROBE ---
+  # Comprueba que la aplicación siga viva y respondiendo.
+  # Si esta sonda falla, Kubernetes reinicia el contenedor automáticamente.
+  liveness: 
+    # Endpoint HTTP que se consulta para verificar la salud del servicio.
+    path: /healthcheck
+    # Retraso inicial (en segundos) antes del primer chequeo
+    # para dar tiempo a que la aplicación arranque.
+    initialDelaySeconds: 60
+    # Máximo número de fallos consecutivos antes de reiniciar el contenedor.
+    failureThreshold: 5
+    # Frecuencia (en segundos) con la que se ejecuta la comprobación.
+    periodSeconds: 30
+
+# Reemplazar Deployment por Rollout (Argo Rollouts)
 rollout:
   enabled: false
 
-
-# Annotations para el deployment/ CronJob
+# Anotaciones adicionales para el Deployment o CronJob
 annotations:
   enabled: false
   list:
-    reloader.stakater.com: "true"
+    reloader.stakater.com/auto: "true"
     someother/annotation: enabled
 
-
-# Annotations para el pod
+# Anotaciones adicionales para el Pod
 annotationsPod:
   enabled: false
   list:
-    reloader.stakater.com: "true"
+    reloader.stakater.com/auto: "true"
     someother/annotation: enabled
 
+# Definir alias de hosts en /etc/hosts del contenedor
 hostAliases:
   enabled: false
   aliases:
@@ -50,178 +214,21 @@ hostAliases:
      hostnames:
      - "service.local"
 
-  # El initContainer se ejecuta antes que el contenedor principal
-  # El mismo tiene montados los mismos volúmenes, secretos y configmaps 
-  # que el contenedor principal
-  # La diferencia es que no hay una app ejecutandose en el mismo.
-  # Puede ser utilizado para realizar modificaciones antes de que la aplicación se ejecute
-
+# Contenedor de inicialización (initContainer)
+# Se ejecuta antes del contenedor principal y puede hacer tareas previas
 initContainer:
     enabled: false
     command:
-      container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
+      container_shell: "/bin/sh"
       args:
         - |
           echo "initContainer"
 
-image:
-  name: "harbor.com.ar/docker-hub/httpd"
-  tag: "alpine"
-  pullPolicy: IfNotPresent # Puede ser 'Always', 'IfNotPresent' o 'Never'
-
-command:
+# Permisos de escritura para el pod
+# Útil cuando la aplicación necesita escribir en directorios del sistema
+podWritePermissions:
   enabled: false
-  container_shell: "/bin/sh" # "/bin/sh" o "/bin/bash"
-  args:
-    - |
-      echo "Ejecutando comando"
-      echo "Hola Mundo"
-      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
-      #sleep infinity
-
-
-port:
-  port: 80
-  targetPort: 80
-
-
-env:
-  enabled: false
-  list:
-    - name: KC_HTTPS_CERTIFICATE_FILE
-      value: /opt/cert/tls.crt 
-    - name: KC_HTTPS_CERTIFICATE_KEY_FILE
-      value: /opt/key/tls.key  
-    - name: KC_HEALTH_ENABLED
-      value: "true"
-
-secrets:
-  enabled: false
-  list:
-    - name: AUTH_JWT_SECRET
-      path: "dev/sigeva/sigeva-api"
-      key: "AUTH_JWT_SECRET"
-    - name: DB_PASSWORD
-      path: "dev/sigeva/sigeva-api"
-      key: "DB_PASSWORD"
-    - name: DATABASE_DRIVER
-      path: "dev/ojs"
-      key: "DATABASE_DRIVER"
-
-fileFromSecret:
-  enabled: false
-  list:
-    - fileName: "config.properties"
-      path: "dev/sigeva/sigeva-api"
-      secretKey: "AUTH_JWT_SECRET"
-      mount: "/etc/config"
-    - fileName: "any.properties"
-      path: "dev/ojs"
-      secretKey: "DATABASE_DRIVER"
-      mount: "/other/mount"
-
-environmentFromSecret:
-  enabled: false
-  list:
-    - path: "dev/soporte_faud/databases"
-    - path: "dev/longhorn-system/backup-target-minio"
-
-
-volumes:
-  enabled: false
-  list:
-    - size: 5Gi
-      retain: false # puede ser false o true. Si es true, el PVC no se borra al eliminar el deployment
-      mounts: 
-        - /etc/other/storage
-        - /var/lib/other
-    - size: 10Gi
-      retain: false  # puede ser false o true. Si es true, el PVC no se borra al eliminar el deployment
-      mounts: 
-        - /etc/other/almacenaje
-        - /var/lib/otro
-
-resources:
-  requests:
-    cpu: "250m"
-    memory: "512Mi"
-  limits:
-    cpu: "1000m"
-    memory: "2048Mi"
-
-configMaps:
-  enabled: false
-  list:
-    - name: init.sh
-      data: |
-            #ejemplo
-            comdocII.release=3.0
-            # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
-            comdocII.server=UNC
-            # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
-            # dentro de un documento
-            comdocII.max-upload=20
-            # Link ofrecido para descargar lector de archivos PDF
-            comdocII.downloads.visor-pdf=http://adobe.com/reader
-      path: /opt/map1
-      chmod: 0755
-
-hpa:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 1
-  targetCPUUtilizationPercentage: 80
-
-
-# Ingress
-ingress:
-    enabled: false
-    ingressClassName: "" # IngressClassName por defecto es 'nginx'
-    hosts: # Todos los hosts apuntaran al mismo servicio
-    -  host: "k8s-ejemplo3.com.ar"
-       annotations:
-          enabled: false
-          list:
-            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-       oauth2ProxyUsers: 
-        #  - nombre.apellido@gmail.com
-
-       allowedIPs: 
-        #- 172.16.59.65
-        #-
-        #-
-        #-
-
-    -  host: "k8s-ejemplo4.com.ar"
-       annotations:
-          enabled: false
-          list:
-            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-       oauth2ProxyUsers: 
-        #  - nombre.apellido@gmail.com
-       allowedIPs:
-        #- 172.16.59.65
-        #-
-        #-
-        #-
-
-
-
-# Probes
-probes:
-  # Habilitar para que se realicen 'probes' sobre los contenedores
-  enabled: false
-  # URL para verificar que la aplicación está lista para recibir tráfico
-  startup:
-    # Por defecto, se realiza la prueba cada 2 segundos en el path /test
-    path: /test
-    periodSeconds: 10
-    # Si falla 5 veces seguidas, se considera que la aplicación no está lista
-    failureThreshold: 5
-  # URL para verificar que la aplicación sigue viva
-  liveness: 
-    # Por defecto, se realiza la prueba cada 30 segundos en el path /healthcheck
-    path: /healthcheck
-    initialDelaySeconds: 60
-    failureThreshold: 5
-    periodSeconds: 30
+  paths:
+    #- /usr/local
+    #- /var/lib/postgresql/data
+    #- /var/lib/mongodb

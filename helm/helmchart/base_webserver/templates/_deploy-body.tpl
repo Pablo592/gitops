@@ -3,6 +3,17 @@
   image: {{ .imageName }}:{{ .imageTag }}
   imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
 
+  {{- if or (and .Values.allowExecutionWithRoot (not .Values.allowExecutionWithRoot.enabled)) (not .Values.allowExecutionWithRoot) }}
+  securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+  {{- end }}
+
+
+
   {{- if .command }}
   {{- if .commandEnabled }}
   command:
@@ -51,7 +62,8 @@
 
   {{- if or (and .Values.volumes .Values.volumes.enabled) 
             (and .Values.configMaps .Values.configMaps.enabled) 
-            (and .Values.fileFromSecret .Values.fileFromSecret.enabled) }}
+            (and .Values.fileFromSecret .Values.fileFromSecret.enabled)
+            (and .Values.podWritePermissions .Values.podWritePermissions.enabled) }}
   volumeMounts:
     {{- if and .Values.volumes .Values.volumes.enabled .Values.volumes.list }}
       {{- range $vol := .Values.volumes.list }}
@@ -62,6 +74,14 @@
       subPath: {{ base $mount }}
       mountPath: {{ $mount }}
         {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- if and .Values.podWritePermissions .Values.podWritePermissions.enabled .Values.podWritePermissions.paths }}
+      {{- range .Values.podWritePermissions.paths }}
+      {{- $volName := include "base_webserver.sanitizeName" (printf "%s" .) }}
+    - name: {{ $volName }}
+      mountPath: {{ . }}
       {{- end }}
     {{- end }}
 

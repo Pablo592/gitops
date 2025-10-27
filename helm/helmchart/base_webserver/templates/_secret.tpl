@@ -13,7 +13,7 @@ spec:
     name: {{ include "base_webserver.sanitizeName" (printf "%s-secret" .path) }}
     create: true
   # static secret refresh interval
-  refreshAfter: 24h
+  refreshAfter: 1m
   # Name of the CRD to authenticate to Vault
   vaultAuthRef: {{ .name }}-auth
 
