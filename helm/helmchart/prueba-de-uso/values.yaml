@@ -1,0 +1,38 @@
+# Cluster donde será desplegado el proyecto
+# Puede ser 'prod', 'dev' o 'lab'
+# Default: dev
+cluster: "dev"
+
+
+# Especificar la versión del chart a utilizar
+chart_version: "1.0.0"
+
+# 'group' será utilizado como el namespace de Kubernetes
+# 'project' será utilizado como el nombre de los recursos
+group: "grupo-gitlab"
+project: "proyecto"
+area: "area"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
+
+
+# Tipo de recurso principal que se desplegará
+# Puede ser un Deployment (aplicación que corre continuamente)
+# o un CronJob (tarea programada que corre periódicamente)
+type: "Deployment"
+crontab: "0 12 * * 0"  # Cron expression utilizada solo si type es CronJob
+
+
+# Imagen del contenedor a desplegar
+image:
+ name: nginx  # Ruta completa del repositorio de la imagen
+ tag:  alpine  # Versión o tag de la imagen
+ pullPolicy: IfNotPresent  # Política de descarga (Always, IfNotPresent, Never)
+
+
+
+# Configuración de puertos del contenedor
+port:
+ port: 80
+ targetPort: 80
+
+allowExecutionWithRoot:
+ enabled: true

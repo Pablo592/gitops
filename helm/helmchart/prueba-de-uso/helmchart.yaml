@@ -1,0 +1,10 @@
+apiVersion: builtin
+kind: HelmChartInflationGenerator
+metadata:
+  name: test # El nombre del despliegue
+name: base_webserver # Nombre del chart
+repo: "http://localhost:8080" # Direccion de Chart Museum
+releaseName: test # El nombre del release
+namespace: namespace
+valuesFile: ./values.yaml # El nombre del archivo values
+version: 1.0.0 # La version del chart

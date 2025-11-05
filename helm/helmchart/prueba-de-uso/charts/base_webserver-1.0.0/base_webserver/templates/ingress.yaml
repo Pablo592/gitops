@@ -1,0 +1,38 @@
+{{- if and .Values.port .Values.ingress .Values.ingress.enabled }}
+{{- $namespace := .Values.group  | replace "." ""  -}}
+{{- $project := .Values.project -}}
+{{- $port := .Values.port.port -}}
+{{- $area := .Values.area -}}
+{{- $classname := .Values.ingress.ingressClassName -}}
+  {{- if .Values.ingress.hosts }}
+    {{- range .Values.ingress.hosts }}
+      {{- if or (not .oauth2ProxyUsers) (eq (len .oauth2ProxyUsers) 0) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $namespace }}-{{ .host | replace "." "" }}-ingress
+  namespace: {{ $namespace }}
+    {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .annotations  "area" $area) | nindent 2 }}
+        {{- if .allowedIPs }}
+          {{- if ne (len .allowedIPs) 0 }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," .allowedIPs | quote }}
+          {{- end }}
+        {{- end }}
+spec:
+  ingressClassName: {{ $classname | default "nginx" }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $namespace }}-{{ $project }}-service
+                port:
+                  number: {{ $port }}
+---
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
