@@ -47,11 +47,13 @@ spec:
   selector:
     matchLabels:
       app: {{ $name }}
+      area: {{ .Values.area | default "psi" | quote }}
   template:
     metadata:
       {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 6 }}
       labels:
         app: {{ $name }}
+        area: {{ .Values.area | default "psi" | quote }}
     spec:
       {{- if and .Values.hostAliases .Values.hostAliases.enabled }}
       hostAliases:
@@ -59,9 +61,18 @@ spec:
       {{- end }}
       imagePullSecrets:
         - name: {{ $namespace }}-{{ $name }}-harbor-secret
+
+      {{- if or (and .Values.allowExecutionWithRoot (not .Values.allowExecutionWithRoot.enabled)) (not .Values.allowExecutionWithRoot) }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      {{- end }}
+      
 {{- if and .Values.initContainer .Values.initContainer.enabled }}
       initContainers:
-{{- $ctxInit := dict "name" $nameInit "Values" .Values "namespace" $namespace "command" .Values.initContainer.command "commandEnabled" .Values.initContainer.enabled "imageName" "harbor.com.ar/docker-hub/alpine" "imageTag" "latest" -}}
+{{- $ctxInit := dict "name" $nameInit "Values" .Values "namespace" $namespace "command" .Values.initContainer.command "commandEnabled" .Values.initContainer.enabled "imageName" "alpine" "imageTag" "latest" -}}
 {{- include "base_webserver.deploy-body" $ctxInit | nindent 6 }}
 {{- end }}
       containers:

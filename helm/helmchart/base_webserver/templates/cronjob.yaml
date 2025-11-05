@@ -14,14 +14,26 @@ metadata:
   namespace: {{ $namespace }}
   {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
 spec:
-  schedule: {{ .Values.crontab }}
+  schedule: "{{ .Values.crontab }}"
   jobTemplate:
     spec:
       template:
         metadata:
       {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 10 }}
         spec:
+        
+          {{- if or (and .Values.allowExecutionWithRoot (not .Values.allowExecutionWithRoot.enabled)) (not .Values.allowExecutionWithRoot) }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          {{- end }}
           restartPolicy: OnFailure
+          {{- if and .Values.hostAliases .Values.hostAliases.enabled }}
+          hostAliases:
+            {{- toYaml .Values.hostAliases.aliases | nindent 12 }}
+          {{- end }}
           containers:
 {{- include "base_webserver.deploy-body" $ctx | nindent 10 }}
 {{- include "base_webserver.deploy-volume" $ctx | nindent 10 }}

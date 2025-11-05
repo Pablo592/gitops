@@ -2,7 +2,8 @@
 
   {{- if or (and .Values.volumes .Values.volumes.enabled) 
             (and .Values.configMaps .Values.configMaps.enabled) 
-            (and .Values.fileFromSecret .Values.fileFromSecret.enabled) }}
+            (and .Values.fileFromSecret .Values.fileFromSecret.enabled)
+            (and .Values.podWritePermissions .Values.podWritePermissions.enabled) }}
 volumes:
     {{- if and .Values.volumes .Values.volumes.enabled .Values.volumes.list }}
       {{- range $vol := .Values.volumes.list }}
@@ -26,7 +27,13 @@ volumes:
             path: {{ .fileName }}
       {{- end }}
     {{- end }}
-
+  {{- if and .Values.podWritePermissions .Values.podWritePermissions.enabled .Values.podWritePermissions.paths }}
+    {{- range .Values.podWritePermissions.paths }}
+      {{- $volName := include "base_webserver.sanitizeName" (printf "%s" .) }}
+    - name: {{ $volName }}
+      emptyDir: {}
+      {{- end }}
+    {{- end }}
     {{- if and .Values.configMaps .Values.configMaps.enabled .Values.configMaps.list }}
       {{- range .Values.configMaps.list }}
         {{- $cmName := include "base_webserver.sanitizeName" (printf "cfmap-%s-%s" .path .name) }}

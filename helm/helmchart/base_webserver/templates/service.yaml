@@ -9,6 +9,7 @@ kind: Service
 metadata:
   labels:
     app: {{ $name }}
+    area: {{ .area | default "psi" | quote }}
   namespace: {{ $namespace }}
   name: {{ $namespace }}-{{ $name }}-service
 spec:

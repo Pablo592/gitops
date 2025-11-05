@@ -3,249 +3,233 @@
 # Default: dev
 cluster: "dev"
 
-
 # Especificar la versión del chart a utilizar
-chart_version: "4.3.0"
+chart_version: "1.0.0"
 
 
 # 'group' será utilizado como el namespace de Kubernetes
 # 'project' será utilizado como el nombre de los recursos
 group: "grupo-gitlab"
 project: "proyecto"
-area: "area"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
-
+area: "psi"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
 
 # Tipo de recurso principal que se desplegará
 # Puede ser un Deployment (aplicación que corre continuamente)
 # o un CronJob (tarea programada que corre periódicamente)
-type: "Deployment"
-crontab: "0 12 * * 0"  # Cron expression utilizada solo si type es CronJob
 
+type: "Deployment" #CronJob
+crontab: "0 12 * * 0"  # Cron expression utilizada solo si type es CronJob
 
 # Imagen del contenedor a desplegar
 image:
- name: image.repository.domain/grupo/proyecto  # Ruta completa del repositorio de la imagen
- tag:  XX  # Versión o tag de la imagen
- pullPolicy: IfNotPresent  # Política de descarga (Always, IfNotPresent, Never)
-
+  name: image.repository.com/grupo/proyecto  # Ruta completa del repositorio de la imagen
+  tag:  XX  # Versión o tag de la imagen
+  pullPolicy: IfNotPresent  # Política de descarga (Always, IfNotPresent, Never)
 
 # Comando personalizado a ejecutar al iniciar el contenedor
 # Si se desactiva, el contenedor usa el comando por defecto de la imagen
 command:
- enabled: false
- container_shell: "/bin/sh" # Shell del contenedor
- args:
-   - |
-     echo "Ejecutando comando"
-     echo "Hola Mundo"
-
+  enabled: false
+  container_shell: "/bin/sh" # Shell del contenedor
+  args:
+    - |
+      echo "Ejecutando comando"
+      echo "Hola Mundo"
+      #while true; do echo "ocupando CPU"; sha256sum /dev/zero; done
+      #sleep infinity
 
 # Variables de entorno estándar (env)
 env:
- enabled: false
- list:
-   - name: KC_HTTPS_CERTIFICATE_FILE
-     value: /opt/cert/tls.crt
-   - name: KC_HTTPS_CERTIFICATE_KEY_FILE
-     value: /opt/key/tls.key 
-
+  enabled: false
+  list:
+    #- name: KC_HTTPS_CERTIFICATE_FILE
+    #  value: /opt/cert/tls.crt 
+    #- name: KC_HTTPS_CERTIFICATE_KEY_FILE
+    #  value: /opt/key/tls.key  
 
 # Variables de entorno obtenidas desde secretos almacenados en Vault
 secrets:
- enabled: false
- list:
-   - name: AUTH_JWT_SECRET
-     path: "secret/path"
-     key: "AUTH_JWT_SECRET"
-   - name: DB_PASSWORD
-     path: "secret/path"
-     key: "DB_PASSWORD"
-
+  enabled: false
+  list:
+    #- name: AUTH_JWT_SECRET
+    #  path: "dev/sigeva/sigeva-api"
+    #  key: "AUTH_JWT_SECRET"
+    #- name: DB_PASSWORD
+    #  path: "dev/sigeva/sigeva-api"
+    #  key: "DB_PASSWORD"
 
 # Montar secretos como archivos en rutas específicas dentro del contenedor
 fileFromSecret:
- enabled: false
- list:
-   - fileName: "config.properties"
-     path: "secret/path"
-     secretKey: "AUTH_JWT_SECRET"
-     mount: "secret/path"
-
+  enabled: false
+  list:
+    #- fileName: "config.properties"
+    #  path: "dev/sigeva/sigeva-api"
+    #  secretKey: "AUTH_JWT_SECRET"
+    #  mount: "/etc/config"
 
 # Montar todos los secretos de un path de Vault como variables de entorno
 environmentFromSecret:
- enabled: false
- list:
-   - path: "secret/path"
-   - path: "secret/path"
+  enabled: false
+  list:
+    #- path: "dev/soporte_faud/databases"
+    #- path: "dev/longhorn-system/backup-target-minio"
 
-
-# Configuración de puertos del contenedor
+# Configuración de puertos del docker
 port:
- port: 80
- targetPort: 80
-
+  port: 80
+  targetPort: 80
 
 # ConfigMaps a montar dentro del pod (por ejemplo scripts o archivos de configuración)
 configMaps:
- enabled: false
- list:
-   - name: init.sh
-     data: |
-           #ejemplo
-           comdocII.release=3.0
-           comdocII.server=UNC
-           comdocII.max-upload=20
-           comdocII.downloads.visor-pdf=http://adobe.com/reader
-     path: /opt/map1   # Ruta donde se montará el archivo
-     chmod: 0755       # Permisos del archivo
-
+  enabled: false
+  list:
+    - name: init.sh
+      data: |
+            #ejemplo
+            comdocII.release=3.0
+            comdocII.server=UNC
+            comdocII.max-upload=20
+            comdocII.downloads.visor-pdf=http://adobe.com/reader
+      path: /opt/map1   # Ruta donde se montará el archivo
+      chmod: 0755       # Permisos del archivo
 
 # Configuración de Ingress (acceso HTTP externo al servicio)
 ingress:
-   enabled: false
-   ingressClassName: "" # Clase de ingress (por defecto nginx)
-   hosts:
-   -  host: "domain.com"
-      annotations:
-         enabled: false
-         list:
-           nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-      allowedIPs:
-       #- 192.168.1.1
+    enabled: false
+    ingressClassName: "" # Clase de ingress (por defecto nginx)
+    hosts:
+    -  host: "k8s-ejemplo3.dev.com"
+       annotations:
+          enabled: false
+          list:
+            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+       allowedIPs: 
+        #- 172.16.59.65
+
+
+#    -  host: "k8s-ejemplo4.dev.com"
+#       annotations:
+#          enabled: false
+#          list:
+#            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+#       allowedIPs:
+#        - 172.16.59.65
+#        -
+#        -
+#        -
+
+
 
 
 # Escalado automático (HPA)
 # Ajusta la cantidad de réplicas según el uso de CPU
 hpa:
- enabled: false
- minReplicas: 1
- maxReplicas: 1
- targetCPUUtilizationPercentage: 80
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
 
-
-# El despliegue de contenedores con usuario root (Es una mala práctica), por lo cual,
-# por defecto está prohibido, se hace una excepción para poder seguir desplegando las aplicaciones 
-# hasta que sean corregidas
-
-
-
-
-# Para permitir la ejecución de un docker con el usuario root
+# Para permitir la ejecucion de un docker con el usuario root
 allowExecutionWithRoot:
- enabled: false
-
-
-
-
-
+  enabled: false
 
 # Definición de volúmenes persistentes (PVC)
 volumes:
- enabled: false
- list:
-   #- size: 5Gi
-   #  retain: false  # Si es true, el PVC no se borra al eliminar el deployment
-   #  mounts:
-   #    - /etc/other/storage
-   #    - /var/lib/other
-
+  enabled: false
+  list:
+    #- size: 5Gi
+    #  retain: false  # Si es true, el PVC no se borra al eliminar el deployment
+    #  mounts: 
+    #    - /etc/other/storage
+    #    - /var/lib/other
 
 # Recursos asignados al contenedor (CPU y memoria)
 resources:
- requests:
-   cpu: "250m"
-   memory: "512Mi"
- limits:
-   cpu: "1000m"
-   memory: "2048Mi"
-
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2048Mi"
 
 # Configuración de sondas HTTP (probes) para la aplicación.
 # Permiten a Kubernetes monitorear el estado del contenedor.
 
-
 probes:
- # Activa o desactiva el uso de probes en el deployment.
- enabled: false
+  # Activa o desactiva el uso de probes en el deployment.
+  enabled: false
 
+  # --- STARTUP PROBE ---
+  # Verifica que la aplicación arranque correctamente antes de habilitar
+  # las demás sondas (liveness/readiness). Si esta falla repetidamente,
+  # Kubernetes reinicia el contenedor.
+  startup:
+    # Endpoint HTTP que se consulta para validar el arranque.
+    path: /test
+    # Intervalo (en segundos) entre cada verificación.
+    periodSeconds: 10
+    # Número máximo de fallos permitidos antes de marcar el contenedor como fallido.
+    failureThreshold: 5
 
- # --- STARTUP PROBE ---
- # Verifica que la aplicación arranque correctamente antes de habilitar
- # las demás sondas (liveness/readiness). Si esta falla repetidamente,
- # Kubernetes reinicia el contenedor.
- startup:
-   # Endpoint HTTP que se consulta para validar el arranque.
-   path: /test
-   # Intervalo (en segundos) entre cada verificación.
-   periodSeconds: 10
-   # Número máximo de fallos permitidos antes de marcar el contenedor como fallido.
-   failureThreshold: 5
-
-
- # --- LIVENESS PROBE ---
- # Comprueba que la aplicación siga viva y respondiendo.
- # Si esta sonda falla, Kubernetes reinicia el contenedor automáticamente.
- liveness:
-   # Endpoint HTTP que se consulta para verificar la salud del servicio.
-   path: /healthcheck
-   # Retraso inicial (en segundos) antes del primer chequeo
-   # para dar tiempo a que la aplicación arranque.
-   initialDelaySeconds: 60
-   # Máximo número de fallos consecutivos antes de reiniciar el contenedor.
-   failureThreshold: 5
-   # Frecuencia (en segundos) con la que se ejecuta la comprobación.
-   periodSeconds: 30
-
+  # --- LIVENESS PROBE ---
+  # Comprueba que la aplicación siga viva y respondiendo.
+  # Si esta sonda falla, Kubernetes reinicia el contenedor automáticamente.
+  liveness: 
+    # Endpoint HTTP que se consulta para verificar la salud del servicio.
+    path: /healthcheck
+    # Retraso inicial (en segundos) antes del primer chequeo
+    # para dar tiempo a que la aplicación arranque.
+    initialDelaySeconds: 60
+    # Máximo número de fallos consecutivos antes de reiniciar el contenedor.
+    failureThreshold: 5
+    # Frecuencia (en segundos) con la que se ejecuta la comprobación.
+    periodSeconds: 30
 
 # Reemplazar Deployment por Rollout (Argo Rollouts)
 rollout:
- enabled: false
-
+  enabled: false
 
 # Anotaciones adicionales para el Deployment o CronJob
 annotations:
- enabled: false
- list:
-   reloader.stakater.com/auto: "true"
-   someother/annotation: enabled
-
+  enabled: false
+  list:
+    reloader.stakater.com/auto: "true"
+    someother/annotation: enabled
 
 # Anotaciones adicionales para el Pod
 annotationsPod:
- enabled: false
- list:
-   reloader.stakater.com/auto: "true"
-   someother/annotation: enabled
-
+  enabled: false
+  list:
+    reloader.stakater.com/auto: "true"
+    someother/annotation: enabled
 
 # Definir alias de hosts en /etc/hosts del contenedor
 hostAliases:
- enabled: false
- aliases:
-  - ip: "192.168.1.100"
-    hostnames:
-    - "example.local"
-    - "example2.local"
-  - ip: "192.168.1.101"
-    hostnames:
-    - "service.local"
-
+  enabled: false
+  aliases:
+   - ip: "192.168.1.100"
+     hostnames:
+     - "example.local"
+     - "example2.local"
+   - ip: "192.168.1.101"
+     hostnames:
+     - "service.local"
 
 # Contenedor de inicialización (initContainer)
 # Se ejecuta antes del contenedor principal y puede hacer tareas previas
 initContainer:
-   enabled: false
-   command:
-     container_shell: "/bin/sh"
-     args:
-       - |
-         echo "initContainer"
-
+    enabled: false
+    command:
+      container_shell: "/bin/sh"
+      args:
+        - |
+          echo "initContainer"
 
 # Permisos de escritura para el pod
 # Útil cuando la aplicación necesita escribir en directorios del sistema
 podWritePermissions:
- enabled: false
- paths:
-   #- /usr/local
+  enabled: false
+  paths:
+    #- /usr/local
+    #- /var/lib/postgresql/data
+    #- /var/lib/mongodb
