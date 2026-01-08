@@ -1,21 +1,21 @@
 .common_job_template: &common_job_template
   id_tokens:
       VAULT_ID_TOKEN:
-        aud: https://secrets.domain
+        aud: https://<vault-domain>
   tags:
     - servicios-ci-cd
-  image: image.respository.domain/servicios/alpine:latest
+  image: <image-registry-domain>/servicios/alpine:latest
   stage: update_deploy_tag
   variables:
     # Default values and constants
-    GIT_USER_EMAIL: "push_harbor@gmail.com"
+    GIT_USER_EMAIL: "push_harbor@unc.edu.ar"
     GIT_USER_NAME: "ci-cd-push-harbor"
-    VAULT_URL: "https://secrets.domain"
+    VAULT_URL: "https://<vault-domain>"
     VAULT_AUTH_PATH: "/v1/auth/gitlab/login"
     VAULT_SECRET_PATH: "/v1/gitlab/data/ci-cd/gitlab-impersonation-token"
   before_script: |
       #!/bin/bash
-
+      
       function setup_environment() {
         # Verificar si existe el repo deploy
         if [[ -z "$DEPLOY_REPO_PATH" ]]; then
@@ -70,7 +70,9 @@
       }
 
       function get_cluster() {
-        if [ "$CI_COMMIT_BRANCH" == "$DEV_BRANCH" ]; then
+        if [[ "$CI_PROJECT_PATH" == *"choique"* ]] && [ "$CI_COMMIT_BRANCH" == "$DEV_BRANCH" ]; then
+          echo "ext"
+        elif [ "$CI_COMMIT_BRANCH" == "$DEV_BRANCH" ]; then
           echo "dev"
         elif [ "$CI_COMMIT_BRANCH" == "$DEMO_BRANCH" ]; then
           echo "lab"
@@ -84,18 +86,27 @@
         local app=$2
         local docker_tag=$3
         local ticket_number=$4
+        local service_name=$5
+
+        # Determinar el directorio base
+        local target_dir="$APP"
+        if [ "$service_name" != "." ] && [ -n "$service_name" ]; then
+             target_dir="$service_name"
+        fi
 
         # Determinar el nombre del archivo values
-        local values_file="$APP/values-${cluster}.yml"
+        local values_file="$target_dir/values-${cluster}.yml"
         if [ ! -f "$values_file" ]; then
-          values_file="$APP/values-${cluster}.yaml"
+          values_file="$target_dir/values-${cluster}.yaml"
         fi
 
         # Comprueba si la variable VALUES_DEFAULT tiene algun valor
         if [ -n "$VALUES_FILE_DEFAULT" ]; then
           # Reemplazar "CLUSTER" con el contenido de cluster en APP
-          APP=${APP/CLUSTER/$cluster}
-          values_file="$APP/$VALUES_FILE_DEFAULT"
+          # Nota: Esto asume que si se usa VALUES_FILE_DEFAULT, la logica de reemplazo de CLUSTER aplica al nombre del archivo
+          # Si el target_dir cambio, quizas esto necesite ajuste, pero mantenemos la logica original para el caso default.
+          # Para el caso multi-image, asumimos estructura estandar.
+          values_file="$target_dir/$VALUES_FILE_DEFAULT"
         fi
 
         # Check if file exists
@@ -104,7 +115,7 @@
           return 1
         fi
 
-        # Actualizar el tag
+        # Actualizar el tag (sin prefijo, ya que estamos en el archivo especifico del servicio)
         if yq -e ".deployment.image.tag" "$values_file" &> /dev/null; then
           yq -i ".deployment.image.tag = \"${docker_tag}\"" "$values_file"
         elif yq -e ".image.tag" "$values_file" &> /dev/null; then
@@ -114,9 +125,15 @@
           return 1
         fi
 
+        # Determinar el nombre de la imagen para el commit
+        local full_image_name="${app}-${cluster}"
+        if [ "$service_name" != "." ] && [ -n "$service_name" ]; then
+             full_image_name="${service_name}/${cluster}"
+        fi
+
         # Commit y push de los cambios
         (git add . && \
-         git commit -m "[${ticket_number}] Se actualizó la versión de la imagen $app-${cluster}: $docker_tag" && \
+         git commit -m "[${ticket_number}] Se actualizó la versión de la imagen ${full_image_name}: $docker_tag" && \
          git push) || return 0
       }
 
@@ -130,7 +147,14 @@ update_tag_dev_demo:
       cd $REPO || exit
       
       CLUSTER=$(get_cluster)
-      update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_SHORT_SHA" "$TICKET_NUMBER"
+      
+      if [ -f "$CI_PROJECT_DIR/built_images.txt" ]; then
+        while IFS= read -r service; do
+          update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_SHORT_SHA" "$TICKET_NUMBER" "$service"
+        done < "$CI_PROJECT_DIR/built_images.txt"
+      else
+        update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_SHORT_SHA" "$TICKET_NUMBER" "."
+      fi
 
   dependencies:
     - build_image_dev_demo
@@ -144,7 +168,14 @@ update_tag_prod:
       cd $REPO || exit
       
       CLUSTER=$(get_cluster)
-      update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_TAG" "$TICKET_NUMBER"
+      
+      if [ -f "$CI_PROJECT_DIR/built_images.txt" ]; then
+        while IFS= read -r service; do
+          update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_TAG" "$TICKET_NUMBER" "$service"
+        done < "$CI_PROJECT_DIR/built_images.txt"
+      else
+        update_values_file "$CLUSTER" "$APP" "$CI_COMMIT_TAG" "$TICKET_NUMBER" "."
+      fi
 
   dependencies: 
     - build_image_prod

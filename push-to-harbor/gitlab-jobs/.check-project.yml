@@ -2,32 +2,41 @@ check_project:
   tags:
     - servicios-ci-cd
   stage: check_project
-  image: image.respository.domain/servicios/alpine:latest
+  image: <image-registry-domain>/servicios/alpine:latest
   script: |
     PROJECT=$(echo "$CI_PROJECT_PATH" | cut -d'/' -f1)
 
     # Se verifica la existencia del proyecto en Harbor
-    RESPUESTA=$(curl -i -s --location --head "https://$CI_REGISTRY_HARBOR/api/v2.0/projects?project_name=$PROJECT" \
-                            --header 'accept: application/json' \
-                            --header "Authorization: Basic $HARBOR_SECRET")
+    if ! RESPUESTA=$(curl -i -s --location --head "https://$CI_REGISTRY_HARBOR/api/v2.0/projects?project_name=$PROJECT" \
+                                --header 'accept: application/json' \
+                                --header "Authorization: Basic $HARBOR_SECRET"); then
+      echo "[ERROR] Unable to reach Harbor while checking project $PROJECT. Exiting..."
+      exit 1
+    fi
 
     # Se obtiene el status code de la peticion
-    STATUS_CODE=$(echo "$RESPUESTA" | grep -Fi 'HTTP/1.1' | awk '{print $2}')
+    STATUS_CODE=$(echo "$RESPUESTA" | grep -E 'HTTP/(2|1\.1)' | awk '{print $2}')
 
     # Si el proyecto no existe, es creado
     if [ "$STATUS_CODE" = "404" ]; then
       # Se crea el proyecto
-      curl -s --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects' \
-              --header 'Authorization: Basic '$HARBOR_SECRET'' \
-              --header 'content-type: application/json' \
-              --data '{
-                "project_name": "'$PROJECT'",
-                "public": false,
-                "storage_limit": 20,
-                "metadata": {
-                  "public": "false"
-                }
-              }'
+      if ! curl -s --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects' \
+                --header 'Authorization: Basic '$HARBOR_SECRET'' \
+                --header 'content-type: application/json' \
+                --data '{
+                  "project_name": "'$PROJECT'",
+                  "public": false,
+                  "storage_limit": 20,
+                  "metadata": {
+                    "public": "false"
+                  }
+                }'; then
+        echo "[ERROR] Unable to create Harbor project $PROJECT. Exiting..."
+        exit 1
+      fi
+    else
+      echo "[INFO] Project $PROJECT already exists in Harbor."
+      exit 0
     fi
 
     # Es necesario otorgar permisos al grupo de esa persona para poder acceder al proyecto
@@ -35,45 +44,70 @@ check_project:
     USER_EMAIL=$(echo $CI_COMMIT_AUTHOR | grep -o '<[^>]*>' | awk -F'[<>]' '{print $2}')
 
     # Obtengo un token de Keycloak para poder consumir la API
-    TOKEN=$(curl -sXPOST 'https://'$KEYCLOAK_DOMAIN'/realms/master/protocol/openid-connect/token' \
-                  --header 'Content-Type: application/x-www-form-urlencoded' \
-                  --data-urlencode 'username='$KEYCLOAK_USERNAME'' \
-                  --data-urlencode 'password='$KEYCLOAK_PASSWORD'' \
-                  --data-urlencode 'client_id='$KEYCLOAK_CLIENT_ID'' \
-                  --data-urlencode 'client_secret='$KEYCLOAK_CLIENT_SECRET'' \
-                  --data-urlencode 'grant_type=password' | jq -r '.access_token' -)
-    
+    if ! TOKEN_RESPONSE=$(curl -sXPOST 'https://'$KEYCLOAK_DOMAIN'/realms/master/protocol/openid-connect/token' \
+                        --header 'Content-Type: application/x-www-form-urlencoded' \
+                        --data-urlencode 'username='$KEYCLOAK_USERNAME'' \
+                        --data-urlencode 'password='$KEYCLOAK_PASSWORD'' \
+                        --data-urlencode 'client_id='$KEYCLOAK_CLIENT_ID'' \
+                        --data-urlencode 'client_secret='$KEYCLOAK_CLIENT_SECRET'' \
+                        --data-urlencode 'grant_type=password'); then
+      echo "[ERROR] Unable to reach Keycloak token endpoint. Exiting..."
+      exit 1
+    fi
+
+    TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+    if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+      echo "[ERROR] Keycloak token response is invalid. Exiting..."
+      exit 1
+    fi
+
     # Obtengo la informacion que posee el usuario dentro de keycloak
-    USER=$(curl -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/?username='$USER_EMAIL'' \
-                --header 'Authorization: Bearer '$TOKEN'')
-    
+    if ! USER=$(curl --http1.1 -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/?username='$USER_EMAIL'' \
+                    --header 'Authorization: Bearer '$TOKEN''); then
+      echo "[ERROR] Unable to reach Keycloak users endpoint for $USER_EMAIL. Exiting..."
+      exit 1
+    fi
+
     # Comprobar que el user no este vacio o igual a []
     if [ -z "$USER" ] || [ "$USER" == "[]" ]; then
       echo "[ERROR] User with email $USER_EMAIL not found in Keycloak. Exiting..."
       exit 1
     fi
+         
+    # Intentar obtener la información del usuario original
+    if ! USER=$(curl --http1.1 -s --location "https://${KEYCLOAK_DOMAIN}/admin/realms/${KEYCLOAK_REALM}/users/?username=${USER_EMAIL}" \
+                --header "Authorization: Bearer ${TOKEN}"); then
+      echo "[ERROR] Unable to reach Keycloak users endpoint for ${USER_EMAIL}. Exiting..."
+      exit 1
+    fi
 
     # Obtengo el ID que posee el usuario dentro de keycloak
     ID_USER=$(echo "$USER" | jq -r '.[0].id')
-    
+
     # Listo los grupos a los cuales pertenece el usuario
-    GRUPOS=$(curl -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/'$ID_USER'/groups' \
-                  --header 'Authorization: Bearer '$TOKEN'')
-    
+    if ! GRUPOS=$(curl --http1.1 -s --location 'https://'$KEYCLOAK_DOMAIN'/admin/realms/'$KEYCLOAK_REALM'/users/'$ID_USER'/groups' \
+                      --header 'Authorization: Bearer '$TOKEN''); then
+      echo "[ERROR] Unable to reach Keycloak groups endpoint for user $ID_USER. Exiting..."
+      exit 1
+    fi
+
     for GRUPO in $(echo "$GRUPOS" | jq -c '.[]'); do
       GRUPO_PATH=$(echo "$GRUPO" | jq -r '.path')
       # Voy recorriendo los grupos a excepcion de psi y aplicaciones/*
       if [ "$GRUPO_PATH" != "/psi" ] && [[ ! "$GRUPO_PATH" =~ ^/aplicaciones ]]; then
       # Le doy permisos de Maintainer ("role_id": 4) a cada uno de los grupos los cuales pertenece el usuario
-        curl --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects/'$PROJECT'/members' \
-              --header 'Authorization: Basic '$HARBOR_ADMIN_SECRET'' \
-              --header 'content-type: application/json' \
-              --data '{
-                "role_id": 4,
-                "member_group": {
-                  "group_name": "'$GRUPO_PATH'"
-                }
-              }'
+        if ! curl --location 'https://'$CI_REGISTRY_HARBOR'/api/v2.0/projects/'$PROJECT'/members' \
+                  --header 'Authorization: Basic '$HARBOR_ADMIN_SECRET'' \
+                  --header 'content-type: application/json' \
+                  --data '{
+                    "role_id": 4,
+                    "member_group": {
+                      "group_name": "'$GRUPO_PATH'"
+                    }
+                  }'; then
+          echo "[ERROR] Unable to grant Harbor permissions for group $GRUPO_PATH in project $PROJECT. Exiting..."
+          exit 1
+        fi
       fi
     done
   rules:

@@ -2,11 +2,12 @@
   tags:
     - servicios-ci-cd
   stage: build_image
-  image: image.respository.domain/servicios/kaniko-git:2.2
+  image: <image-registry-domain>/servicios/kaniko-git:2.2
   variables:
     DOCKERFILES: dockerfiles.txt
   before_script:
     - |
+
       # Función para construir y pushear una imagen a Harbor
       function build_and_push() {
         local dockerfile="$1"
@@ -14,19 +15,19 @@
         local image_latest="$3"
         local directory="$4"
 
-        sed -i '/^\(FROM[[:space:]]*\(harbor.psi\|registry.srv\|quay.io\|public.ecr.aws\)\|FROM[[:space:]]*\$\|FROM[[:space:]]*[a-zA-Z0-9_-]\+[[:space:]]\+as\)/!s#^FROM[[:space:]]*\(.*\)#FROM image.respository.domain/docker-hub/\1#' "$dockerfile"
+        sed -i '/^\(FROM[[:space:]]*\(harbor.psi\|registry.srv\|quay.io\|ghcr.io\|public.ecr.aws\)\|FROM[[:space:]]*\$\|FROM[[:space:]]*[a-zA-Z0-9_-]\+[[:space:]]\+as\)/!s#^FROM[[:space:]]*\(.*\)#FROM <image-registry-domain>/docker-hub/\1#' "$dockerfile"
 
-       /kaniko/executor \
-         --cleanup \                                            # Limpia los archivos temporales luego de la build
-         --context ./$directory \                               # Directorio de contexto
-         --dockerfile $dockerfile \                             # Dockerfile a usar
-         --destination $image \                                 # Tag principal (ej. v1.0.0)
-         --destination $image_latest \                          # Tag adicional (ej. latest)
-         --cache="$DOCKER_BUILD_CACHE" \                        # Activa o no el uso de caché
-         --cache-repo="$CI_REGISTRY_HARBOR/kaniko-cache/$CI_PROJECT_PATH/$PROD_BRANCH" \  # Repositorio remoto de caché
-         --cache-copy-layers=true \                             # Reutiliza capas copiadas si no cambiaron
-         --cache-ttl=24h \                                      # Tiempo de validez de la caché
-         $BUILD_ARGS_CMD                                        # Argumentos adicionales de build (pasados como --build-arg)
+        /kaniko/executor \
+          --cleanup \
+          --context ./$directory \
+          --dockerfile $dockerfile \
+          --destination $image \
+          --destination $image_latest \
+          --cache="$DOCKER_BUILD_CACHE" \
+          --cache-repo="$CI_REGISTRY_HARBOR/kaniko-cache/$CI_PROJECT_PATH/$PROD_BRANCH" \
+          --cache-copy-layers=true \
+          --cache-ttl=24h \
+          $BUILD_ARGS_CMD
 
         echo "Imagenes $image y $image_latest pusheadas a Harbor"
         echo "IMAGE=$image" >> tag.env
@@ -42,16 +43,7 @@
 
       # Configurar credenciales de Harbor
       mkdir -p /kaniko/.docker
-      echo "{\"auths\":{\"$CI_REGISTRY_HARBOR\":{\"username\":\"$CI_REGISTRY_USER_HARBOR\",\"password\":\"$CI_REGISTRY_PASSWORD_HARBOR\"}}}" > /kaniko/.docker/config.json
-
-      # Esto es útil si dentro del repositorio que contiene al Dockerfile se configura
-      # una variable BUILD_ARGS con los argumentos necesarios para la construcción de la imagen
-      # en la forma CLAVE=VALOR, separados por un salto de linea
-      # Por ejemplo,
-      # CLAVE1=VALOR1
-      # CLAVE2=VALOR2
-      # CLAVE3=VALOR3
-      # ...
+      echo "{\"auths\":{\"$CI_REGISTRY_HARBOR\":{\"username\":\""'robot$master'"\",\"password\":\"$CI_REGISTRY_PASSWORD_HARBOR\"}}}" > /kaniko/.docker/config.json
 
       BUILD_ARGS_CMD=""
 
@@ -61,17 +53,19 @@
       if [ ! -z "$BUILD_ARGS" ]; then
         while IFS= read -r line; do
           if [ ! -z "$line" ]; then
-            BUILD_ARGS_CMD="$BUILD_ARGS_CMD --build-arg $line"
+            BUILD_ARGS_CMD="$BUILD_ARGS_CMD $line"
           fi
         done < "build_args.txt"
       fi
+
+      echo "BUILD ARGS CMD: $BUILD_ARGS_CMD"
       
   artifacts:
     reports:
       dotenv: tag.env
 
 build_image_dev_demo:
-  image: image.respository.domain/servicios/kaniko:v1.16.0-debug
+  image: <image-registry-domain>/servicios/kaniko:v1.16.0-debug
   extends: .build_image_common
   script:
     - |
@@ -88,17 +82,20 @@ build_image_dev_demo:
         fi
 
         build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
+        echo "$DIRECTORY" >> built_images.txt
       done < "$DOCKERFILES"
   artifacts:
     reports:
       dotenv: tag.env
+    paths:
+      - built_images.txt
   dependencies:
     - check_project
   rules:
     - if: $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH
 
 build_image_prod:
-  image: image.respository.domain/servicios/kaniko:v1.16.0-debug
+  image: <image-registry-domain>/servicios/kaniko:v1.16.0-debug
   extends: .build_image_common
   script:
     - |
@@ -107,23 +104,26 @@ build_image_prod:
         exit 1
       fi
 
-      echo "TAG=$DOCKER_TAG" > tag.env
+      echo "TAG=$CI_COMMIT_TAG" > tag.env
 
       while IFS= read -r linea; do
         DIRECTORY=$(echo "$linea" | sed 's/\/Dockerfile$//; s/^\.\///')
         if [ "$DIRECTORY" == "." ]; then
-          IMAGE=$HUB:$DOCKER_TAG
+          IMAGE=$HUB:$CI_COMMIT_TAG
           IMAGE_LATEST=$HUB:latest
         else
-          IMAGE=$HUB/$DIRECTORY:$DOCKER_TAG
+          IMAGE=$HUB/$DIRECTORY:$CI_COMMIT_TAG
           IMAGE_LATEST=$HUB/$DIRECTORY:latest
         fi
 
         build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
+        echo "$DIRECTORY" >> built_images.txt
       done < "$DOCKERFILES"
   artifacts:
     reports:
       dotenv: tag.env
+    paths:
+      - built_images.txt
   dependencies: 
     - test_tag_in_prod
     - check_project

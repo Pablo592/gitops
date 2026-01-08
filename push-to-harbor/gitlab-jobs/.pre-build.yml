@@ -2,7 +2,7 @@
 test_tag_in_prod:
   tags:
     - servicios-ci-cd
-  image: image.respository.domain/servicios/alpine:latest
+  image: <image-registry-domain>/servicios/alpine:latest
   stage: pre_build
   script: |
     git config --global --add safe.directory $CI_PROJECT_DIR

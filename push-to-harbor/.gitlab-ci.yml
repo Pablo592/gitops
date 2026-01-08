@@ -15,9 +15,10 @@ stages:
   - check_project
   - build_image
   - update_deploy_tag
+  - create_changelog
 
 include:
-  - project: 'servicios/tools/pipeline-utils'
+  - project: 'servicios/onboarding/crearimagen'
     ref: main
 
     file:
