@@ -1,0 +1,58 @@
+# Cluster donde será desplegado el proyecto
+# Puede ser 'prod', 'dev' o 'lab'
+# Default: dev
+cluster: dev
+
+# Especificar la version del chart a utilizar
+chart_version: "4.3.0"
+
+# 'group' será utilizado como el namespace de Kubernetes
+# 'project' será utilizado como el nombre de recursos
+group: apache
+project: no-root
+area: "psi"  # Área a la que pertenece el proyecto (desarrollo, datawarehouse, servicios). Default: psi
+
+type: "Deployment"  #Deployment; CronJob
+crontab: "0 12 * * 0"
+
+image:
+  name: <image-registry-domain>/servicios/nginx-no-root
+  tag:  latest #"XX"
+  pullPolicy: Always # Puede ser 'Always', 'IfNotPresent' o 'Never'
+
+
+port:
+  port: 80
+  targetPort: 80
+
+
+allowExecutionWithRoot:
+  enabled: false
+
+
+# Recursos del contenedor
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2048Mi"
+
+# Ingress
+ingress:
+    enabled: true
+    ingressClassName: "kong-public" # IngressClassName por defecto es 'nginx'
+    hosts: # Todos los hosts apuntaran al mismo servicio
+    -  host: "k8s-ejemplo3.dev.unc.edu.ar"
+       annotations:
+          enabled: false
+          list:
+            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+
+       allowedIPs: 
+        #- 192.168.1.1
+
+
+  
