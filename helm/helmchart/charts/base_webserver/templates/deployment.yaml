@@ -40,20 +40,20 @@ metadata:
   name: {{ $name }}
   {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
 spec:
-  replicas: 1
-
+    {{- if or (not .Values.hpa) (not .Values.hpa.enabled) }}
+  replicas: {{ .Values.replicas | default 1 }}
+    {{- end }}
   {{- end }}
-
   selector:
     matchLabels:
       app: {{ $name }}
-      area: {{ .Values.area | default "psi" | quote }}
   template:
     metadata:
       {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 6 }}
       labels:
         app: {{ $name }}
         area: {{ .Values.area | default "psi" | quote }}
+        chart_version: {{ .Values.chart_version }}
     spec:
       {{- if and .Values.hostAliases .Values.hostAliases.enabled }}
       hostAliases:
@@ -72,7 +72,7 @@ spec:
       
 {{- if and .Values.initContainer .Values.initContainer.enabled }}
       initContainers:
-{{- $ctxInit := dict "name" $nameInit "Values" .Values "namespace" $namespace "command" .Values.initContainer.command "commandEnabled" .Values.initContainer.enabled "imageName" "alpine" "imageTag" "latest" -}}
+{{- $ctxInit := dict "name" $nameInit "Values" .Values "namespace" $namespace "command" .Values.initContainer.command "commandEnabled" .Values.initContainer.enabled "imageName" "<image-registry-domain>/docker-hub/alpine" "imageTag" "latest" -}}
 {{- include "base_webserver.deploy-body" $ctxInit | nindent 6 }}
 {{- end }}
       containers:

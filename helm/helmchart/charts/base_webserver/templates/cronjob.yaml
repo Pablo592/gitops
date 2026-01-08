@@ -12,6 +12,10 @@ kind: CronJob
 metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
+  labels:
+    app: {{ $name }}
+    area: {{ .Values.area | default "psi" | quote }}
+    chart_version: {{ .Values.chart_version }}
   {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotations "area" .Values.area) | nindent 2 }}
 spec:
   schedule: "{{ .Values.crontab }}"
@@ -19,6 +23,11 @@ spec:
     spec:
       template:
         metadata:
+          labels:
+            app: {{ $name }}
+            area: {{ .Values.area | default "psi" | quote }}
+            chart_version: {{ .Values.chart_version }}
+
       {{- include "base_webserver.annotations" (dict "ctx" . "annotation" .Values.annotationsPod "area" .Values.area) | nindent 10 }}
         spec:
         

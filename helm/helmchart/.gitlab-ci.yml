@@ -1,0 +1,41 @@
+variables:
+  GITOPS_REPO: "<gitlab-domain>/servicios/kubernetes/gitops.git"
+  GITOPS_FOLDER: "gitops"
+  SHELL: "/bin/bash"
+
+stages:
+  - build
+  - deploy
+
+build:
+  id_tokens:
+      VAULT_ID_TOKEN:
+        aud: https://<vault-domain>
+  tags:
+      - k8s-runner
+  image: <image-registry-domain>/servicios/tools/chart-base/dev:latest
+  stage: build
+  script: 
+    - ./obtain_credentials.sh
+    - cat creds >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - changes:
+      - "charts/*"
+      - "charts/**/*"
+
+deploy:
+  tags:
+    - k8s-runner
+  image: <image-registry-domain>/servicios/tools/chart-base/dev:latest
+  stage: deploy
+  dependencies:
+    - build
+  script: 
+    - ./update_charts.sh
+  rules:
+    - changes:
+      - "charts/*"
+      - "charts/**/*"
