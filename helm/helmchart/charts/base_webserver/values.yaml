@@ -115,7 +115,7 @@ ingress:
 #          list:
 #            nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
 #       oauth2ProxyUsers: 
-#        #  - nombre.apellido@unc.edu.ar
+#        #  - nombre.apellido@gmail.com
 #       allowedIPs:
 #        - 172.16.59.65
 #        -

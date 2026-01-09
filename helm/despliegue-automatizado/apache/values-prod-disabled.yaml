@@ -1,0 +1,127 @@
+# Cluster where the project is deployed
+# it can be "dev", "rke2" and "prod"
+# default: dev
+cluster: "prod"
+
+# group will be used as k8s namespace
+# project will be used to identify deployment, service and ingress
+group: "grupo-gitlab"
+project: "proyecto"
+owner: "servicios"
+
+rollout: false
+image:
+    name: "<image-registry-domain>/docker-hub/httpd"
+    tag: "latest"
+    pullPolicy: "Always"
+    port: 80
+
+# environmental variables
+environment:
+    enabled: false
+    #env: 
+    #- name: ENV_VAR1
+    #  value: value
+    #- name: ENV_VAR2
+    #  value: value2
+    #secrets: 
+    #- name: SECRET_ENV_VAR
+    #  path: VAULT_SECRET_PATH
+    #  key: KEY_IN_VAULT_SECRET
+
+# Storage
+# if true uses <server://>/group/project/[origin]
+# the points indicated will be persisted on a volume
+volumes:
+    enabled: false 
+    #mount:
+    #    - point: /etc/config 
+    #    - point: /opt/config
+
+#mount config maps inside the container
+#will be mounted as path/name (e. g. /opt/map/map1)
+ConfigMap:
+    enabled: false
+    #ConfigMaps:
+    #  - name: map1
+    #    data: |
+    #          #ejemplo
+    #          comdocII.release=3.0
+
+    #          # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
+    #          comdocII.server=UNC
+
+    #          # Cantidad máxima de megabytes que se pueden subir como archivos adjuntos
+    #          # dentro de un documento
+    #          comdocII.max-upload=20
+
+    #          # Link ofrecido para descargar lector de archivos PDF
+    #          comdocII.downloads.visor-pdf=http://adobe.com/reader
+    #    path: /opt/map
+    #  - name: map2 
+    #    data: |
+    #          #ejemplo2
+    #          comdocII.release=3.0
+
+    #          # Infijo que forma parte del CUDAP, que se asignará a todos los elementos creados
+    #          comdocII.server=UNC
+    #    path: /opt/map
+
+
+# HorizontalPodAutscaler
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 80
+
+# Ingress
+ingress:
+    enabled: true
+    ingressClassName: "" # IngressClassName por defecto es 'nginx'
+    hosts: # Todos los hosts apuntaran al mismo servicio
+    -  host: "k8s-ejemplo-prod.com" 
+        #  -
+        #  -
+       allowedIPs:
+        - 172.16.59.65
+        #-
+        #-
+        #-
+    -  host: "chadbase-prod.com"
+       allowedIPs: []
+        #- 172.16.59.65
+        #-
+        #-
+        #-
+#      -
+#      -
+#      -
+
+
+# probes used to make healthchecks over pods and restart them if needed
+probes:
+    # Enable or disable health checks
+    enabled: false
+    # url to request to check if app started correctly
+    startup:
+      # By default startup is check through /test because it's a simpler request than /healthcheck
+      path: /test
+      # Perform the probe very often by default (each 2 seconds)
+      periodSeconds: 10
+      # As we wait 10 seconds, accept up to 5 errors (50 seconds) before restarting the pod
+      failureThreshold: 5
+    # url to request to check if app is alive, is requested after startupProbeUrl succeded
+    liveness: 
+      # Use /healthcheck to consider liveness, as it's a more complete check than /test
+      path: /healthcheck
+      initialDelaySeconds: 60
+      failureThreshold: 5
+      periodSeconds: 30
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+
+    

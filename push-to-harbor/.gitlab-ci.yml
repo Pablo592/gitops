@@ -18,7 +18,7 @@ stages:
   - create_changelog
 
 include:
-  - project: 'servicios/onboarding/crearimagen'
+  - project: '<repository-ubication>'
     ref: main
 
     file:

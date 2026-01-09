@@ -1,0 +1,94 @@
+valid_ticket_check:
+  id_tokens:
+      VAULT_ID_TOKEN:
+        aud: https://<vault-domain>
+  tags:
+      - servicios-ci-cd
+  image: <image-registry-domain>/servicios/backup/backups2/argo-workflows/mysql:latest
+  stage: validate_ticket
+  allow_failure: true
+  script: |
+    # Comprobar el autor del commit
+    if [ $SERVICIOS_COMMIT_AUTHOR -eq 1 ]; then
+      echo "[INFO] El autor del commit pertenece al departamento Servicios. No se requiere validación."
+      exit 0
+    fi
+
+    # Comprobar si existe un numero de ticket en el mensaje del commit
+    TICKET_NUMBER=$(echo "$CI_COMMIT_MESSAGE" | sed -n 's/.*\[\s*\([^]]*\)\s*\].*/\1/p' | sed 's/ //g' | sed 's/[^0-9]//g')
+
+    if [ -n "$TICKET_NUMBER" ]; then
+      echo "[INFO] Mensaje de commit correcto."
+    else
+      echo "[ERROR] Número de ticket no encontrado en el mensaje de commit."
+      echo "[INFO] Formato esperado: '[NUMERO-DE-TICKET] Mensaje de commit'"
+      exit 0
+    fi
+
+    echo "[INFO] Validando ticket $TICKET_NUMBER..."
+
+    # Obtener secreto de Vault
+    echo "[INFO] Obteniendo credenciales de la base de datos..."
+
+    response=$(curl -s --request POST \
+      --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+      https://<vault-domain>/v1/auth/gitlab/login)
+
+    VAULT_TOKEN=$(echo $response | jq -r .auth.client_token)
+
+    response=$( curl -s \
+      -H "X-Vault-Token: $VAULT_TOKEN" \
+      https://<vault-domain>/v1/servicios/data/databases/user-backup
+    )
+    
+    USER=$(echo $response | jq -r .data.data.user)
+    PASSWORD=$(echo $response | jq -r .data.data.password)
+    HOST=$(echo $response | jq -r .data.data.host)
+    DB=$(echo $response | jq -r .data.data.db)
+
+
+    if [ "$USER" = "null" ] || [ "$PASSWORD" = "null" ] || [ "$HOST" = "null" ]; then
+      echo "[ERROR] No se encontraron credenciales en Vault."
+      exit 1
+    fi
+
+    # Chequear contra la base de datos si existe el ticket 
+    echo "[INFO] Validando ticket contra la base de datos..."
+    
+    result=$(mysql -h "${HOST}" -u "${USER}" -p${PASSWORD} -e "
+    SELECT
+        st.name AS status_name,
+        team.name AS team_name
+    FROM
+        ost_ticket t
+    JOIN
+        ost_ticket__cdata c ON t.ticket_id = c.ticket_id
+    JOIN
+        ost_ticket_status st ON t.status_id = st.id
+    JOIN 
+        ost_team team ON t.team_id = team.team_id 
+    WHERE
+        t.number = $TICKET_NUMBER
+    \G;" "${DB}" 2>/dev/null)
+
+    if [ -z "$result" ]; then
+      echo "[ERROR] El ticket no existe. Debe estar abierto y asignado al departamento Servicios."
+      exit 1
+    fi
+
+    # Extraer los valores de las variables
+    team_name=$(echo "$result" | grep 'team_name:' | awk '{print $3}')
+    status_name=$(echo "$result" | grep 'status_name:' | awk '{print $2}')
+
+    # Comparar los valores y verificar las condiciones
+    if [[ "$team_name" == "Servicios" && "$status_name" == "Open" ]]; then
+      echo "[SUCCESS] El ticket está en el departamento Servicios y el estado es Open."
+    else
+      echo "[ERROR] El ticket no cumple las condiciones. Debe estar abierto y asignado al Equipo Servicios."
+      exit 1
+    fi
+
+  rules:
+    - changes: 
+      - '**/values-prod.yaml'
+      - '**/values-prod.yml'

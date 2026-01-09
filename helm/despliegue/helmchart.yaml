@@ -3,7 +3,7 @@ kind: HelmChartInflationGenerator
 metadata:
   name: no-root # El nombre del despliegue
 name: base_webserver # Nombre del chart
-repo: "https://charts.srv.unc.edu.ar" # Direccion de Chart Museum
+repo: "https://charts.com" # Direccion de Chart Museum
 releaseName: no-root # El nombre del release
 namespace: apache
 valuesFile: ./values.yaml # El nombre del archivo values

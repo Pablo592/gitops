@@ -1,0 +1,20 @@
+variables:
+  GITOPS_REPO: "<gitlab-domain>/<repository-gitops-ubication>/gitops.git" # Repo de argo
+  GITOPS_FOLDER: "gitops" # Nombre del repo
+  SHELL: "/bin/bash"
+
+stages:
+  - check_file_format
+  - check_commit_author
+  - validate_ticket
+  - deploy
+
+
+include:
+  - project: '<repository-ubication>'
+    ref: 'main'
+    file:
+      - 'argocd-deploy/check-file.yaml'
+      - 'argocd-deploy/check-author.yaml'
+      - 'argocd-deploy/validate-ticket.yaml'
+      - 'argocd-deploy/deploy-to-gitops.yaml'

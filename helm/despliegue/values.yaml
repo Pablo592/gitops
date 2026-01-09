@@ -45,7 +45,7 @@ ingress:
     enabled: true
     ingressClassName: "kong-public" # IngressClassName por defecto es 'nginx'
     hosts: # Todos los hosts apuntaran al mismo servicio
-    -  host: "k8s-ejemplo3.dev.unc.edu.ar"
+    -  host: "k8s-ejemplo3.com"
        annotations:
           enabled: false
           list:

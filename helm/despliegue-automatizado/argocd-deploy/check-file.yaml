@@ -1,0 +1,28 @@
+check-file:
+  stage: check_file_format
+  image: <image-registry-domain>/servicios/alpine:latest
+  tags: 
+    - ci-cd
+  script:
+    |
+    #!/bin/bash
+    # Valida todos los archivos .yaml y .yml dentro de los proyectos, excepto los deshabilitados
+
+    # Buscar todos los archivos YAML en el directorio actual y subdirectorios
+    for file in $(find . -type f \( -name "*.yaml" -o -name "*.yml" \)); do
+      filename=$(basename "$file")
+
+      # Omitir archivos o carpetas que contengan "disabled"
+      if [[ "$filename" == "disabled" || "$file" =~ disabled ]]; then
+        continue
+      fi
+
+      # Validar el archivo YAML con yq
+      if ! output=$(yq . "$file" 2>&1); then
+        echo "[ERROR] ❌ Sintaxis inválida en el archivo YAML: $file"
+        echo "$output"
+        exit 1
+      fi
+    done
+
+    echo "[INFO] ✅ Todos los archivos YAML son válidos."

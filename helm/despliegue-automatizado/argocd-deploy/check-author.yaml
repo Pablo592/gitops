@@ -1,0 +1,83 @@
+valid-author:
+    stage: check_commit_author
+    image: <image-registry-domain>/servicios/alpine:latest
+    tags: 
+        - ci-cd
+    id_tokens:
+        VAULT_ID_TOKEN:
+            aud: https://<vault-domain>
+    rules:
+        - changes:
+            - '**/values-prod.yaml'
+            - '**/values-prod.yml'
+    artifacts:
+        reports:
+            dotenv: author_validation.env
+        expire_in: 1 hour
+    script:
+        |
+        # Obtener secreto de Vault
+        response=$(curl --http1.1 -s --request POST \
+          --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+          https://<vault-domain>/v1/auth/gitlab/login)
+
+        VAULT_TOKEN=$(echo $response | jq -r .auth.client_token)
+
+        response=$( curl --http1.1 -s \
+          -H "X-Vault-Token: $VAULT_TOKEN" \
+          https://<vault-domain>/v1/servicios/data/databases/user-backup
+        )
+
+        USERNAME=$(echo $response | jq -r .data.data.keycloak_username)
+        PASSWORD=$(echo $response | jq -r .data.data.keycloak_password)
+        CLIENT_ID=$(echo $response | jq -r .data.data.keycloak_client_id)
+        CLIENT_SECRET=$(echo $response | jq -r .data.data.keycloak_client_secret)
+        GROUP=$(echo $response | jq -r .data.data.keycloak_group)
+        REALM=$(echo $response | jq -r .data.data.keycloak_realm)
+
+        TOKEN=$(curl  -sXPOST 'https://<keycloak-domain>/realms/master/protocol/openid-connect/token' \
+                     --header 'Content-Type: application/x-www-form-urlencoded' \
+                     --data-urlencode 'username='$USERNAME'' \
+                     --data-urlencode 'password='$PASSWORD'' \
+                     --data-urlencode 'client_id='$CLIENT_ID'' \
+                     --data-urlencode 'client_secret='$CLIENT_SECRET'' \
+                     --data-urlencode 'grant_type=password' | jq -r '.access_token' -)
+
+        if [ "$TOKEN" == "null" ]; then
+            echo "[ERROR] No se pudo obtener el token."
+            exit 1
+        fi
+
+        COMMIT_AUTHOR=$(echo $CI_COMMIT_AUTHOR | awk -F'[<>]' '{print $2}' | sed 's/[<>]//g')
+        echo "[INFO] Validando autor del commit: $COMMIT_AUTHOR"
+
+        # Buscar usuario por email
+        USER_RESPONSE=$(curl --http1.1 -s --location 'https://<keycloak-domain>/admin/realms/'$REALM'/users?email='$COMMIT_AUTHOR'&exact=true' \
+                --header 'Authorization: Bearer '$TOKEN'')
+
+        USER_ID=$(echo "$USER_RESPONSE" | jq -r '.[0].id')
+        VALID=0
+
+        if [ "$USER_ID" == "null" ] || [ -z "$USER_ID" ]; then
+            echo "[ERROR] El usuario $COMMIT_AUTHOR no existe en Keycloak."
+            exit 1
+        else
+            echo "[INFO] Usuario encontrado en Keycloak."
+
+            # Obtener grupos del usuario
+            USER_GROUPS=$(curl --http1.1 -s --location 'https://<keycloak-domain>/admin/realms/'$REALM'/users/'$USER_ID'/groups' \
+                    --header 'Authorization: Bearer '$TOKEN'')
+
+            # Chequear si el grupo objetivo esta en la lista de grupos del usuario
+            IS_MEMBER=$(echo "$USER_GROUPS" | jq -r '.[] | select(.name == "'$GROUP'") | .id')
+
+            if [ ! -z "$IS_MEMBER" ]; then
+                echo "[INFO] El autor del commit es un miembro del grupo $GROUP."
+                VALID=1
+            else
+                echo "[INFO] El autor del commit no es un miembro del grupo $GROUP."
+            fi
+        fi
+
+        echo "SERVICIOS_COMMIT_AUTHOR=$VALID" >> author_validation.env
+
