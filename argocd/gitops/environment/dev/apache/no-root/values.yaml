@@ -111,9 +111,8 @@ podWritePermissions:
 env:
   enabled: false
   list:
-    #- name: KC_HTTPS_CERTIFICATE_FILE
-    #  value: /opt/cert/tls.crt 
-
+    #- name: KC_HEALTH_ENABLED
+    #  value: "true"
 
 # Variables de entorno desde secretos de Vault
 

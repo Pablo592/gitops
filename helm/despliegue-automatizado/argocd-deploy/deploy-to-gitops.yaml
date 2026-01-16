@@ -7,7 +7,7 @@ deploy_to_gitops:
   image: <image-registry-domain>/servicios/alpine:latest
   stage: deploy
   before_script:
-    - git config --global user.email "pipeline@unc.edu.ar"
+    - git config --global user.email "pipeline@gmail.com"
     - git config --global user.name "ci-cd-pipeline"
   script:
       |

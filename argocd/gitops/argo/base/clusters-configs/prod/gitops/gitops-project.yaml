@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-prod
+  namespace: argocd
+spec:
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  destinations:
+  - namespace: '*'
+    name: "prod"
+
+  - namespace: "argocd"
+    server: "https://kubernetes.default.svc"
+  
+  sourceRepos:
+  - https://<gitlab-domain>/servicios/kubernetes/gitops.git
+
+  roles:
+    - name: servicios
+      description: "Rol para miembros del grupo servicios"
+      policies:
+      - p, proj:gitops-prod:servicios, applicationsets, *, gitops-prod/*, allow
+      - p, proj:gitops-prod:servicios, applications, *, gitops-prod/*, allow
+      groups:
+      - servicios
+    - name: desarrollo
+      description: "Rol para miembros del grupo desarrollo"
+      policies:
+      - p, proj:gitops-prod:desarrollo, applicationsets, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:desarrollo, applicationsets, sync, gitops-prod/*, allow
+      - p, proj:gitops-prod:desarrollo, applications, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:desarrollo, applications, sync, gitops-prod/*, allow
+      groups:
+      - desarrollo
+    - name: inteligenciaArtificial
+      description: "Rol para miembros del grupo inteligenciaArtificial"
+      policies:
+      - p, proj:gitops-prod:inteligenciaArtificial, applicationsets, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:inteligenciaArtificial, applicationsets, sync, gitops-prod/*, allow
+      - p, proj:gitops-prod:inteligenciaArtificial, applications, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:inteligenciaArtificial, applications, sync, gitops-prod/*, allow
+      groups:
+      - inteligenciaArtificial
+    - name: serviciosweb
+      description: "Rol para miembros del grupo serviciosweb"
+      policies:
+      - p, proj:gitops-prod:serviciosweb, applicationsets, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:serviciosweb, applicationsets, sync, gitops-prod/*, allow
+      - p, proj:gitops-prod:serviciosweb, applications, get, gitops-prod/*, allow
+      - p, proj:gitops-prod:serviciosweb, applications, sync, gitops-prod/*, allow
+      groups:
+      - serviciosweb
+  

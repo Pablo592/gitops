@@ -1,7 +1,7 @@
 # Cluster donde será desplegado el proyecto
 # Puede ser 'prod', 'dev' o 'lab'
 # Default: dev
-cluster: dev
+cluster: lab
 
 # Especificar la version del chart a utilizar
 chart_version: "4.3.0"
@@ -111,9 +111,8 @@ podWritePermissions:
 env:
   enabled: false
   list:
-    #- name: KC_HTTPS_CERTIFICATE_FILE
-    #  value: /opt/cert/tls.crt 
-
+    #- name: KC_HEALTH_ENABLED
+    #  value: "true"
 
 # Variables de entorno desde secretos de Vault
 

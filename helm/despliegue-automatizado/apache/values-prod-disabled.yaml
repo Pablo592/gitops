@@ -84,13 +84,13 @@ ingress:
         #  -
         #  -
        allowedIPs:
-        - 172.16.59.65
+        - 192.168.1.1
         #-
         #-
         #-
     -  host: "chadbase-prod.com"
        allowedIPs: []
-        #- 172.16.59.65
+        #- 192.168.1.1
         #-
         #-
         #-

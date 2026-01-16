@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-dev
+  namespace: argocd
+spec:
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  destinations:
+  - namespace: '*'
+    name: "dev"
+
+  - namespace: "argocd"
+    server: "https://kubernetes.default.svc"
+  
+  sourceRepos:
+  - https://<gitlab-domain>/servicios/kubernetes/gitops.git
+
+  roles:
+    - name: servicios
+      description: "Rol para miembros del grupo servicios"
+      policies:
+      - p, proj:gitops-dev:servicios, applicationsets, *, gitops-dev/*, allow
+      - p, proj:gitops-dev:servicios, applications, *, gitops-dev/*, allow
+      groups:
+      - servicios
+    - name: desarrollo
+      description: "Rol para miembros del grupo desarrollo"
+      policies:
+      - p, proj:gitops-dev:desarrollo, applicationsets, *, gitops-dev/*, allow
+      - p, proj:gitops-dev:desarrollo, applications, *, gitops-dev/*, allow
+      groups:
+      - desarrollo
+    - name: inteligenciaArtificial
+      description: "Rol para miembros del grupo inteligenciaArtificial"
+      policies:
+      - p, proj:gitops-dev:inteligenciaArtificial, applicationsets, *, gitops-dev/*, allow
+      - p, proj:gitops-dev:inteligenciaArtificial, applications, *, gitops-dev/*, allow
+      groups:
+      - inteligenciaArtificial
+    - name: serviciosweb
+      description: "Rol para miembros del grupo serviciosweb"
+      policies:
+      - p, proj:gitops-dev:serviciosweb, applicationsets, *, gitops-dev/*, allow
+      - p, proj:gitops-dev:serviciosweb, applications, *, gitops-dev/*, allow
+      groups:
+      - serviciosweb

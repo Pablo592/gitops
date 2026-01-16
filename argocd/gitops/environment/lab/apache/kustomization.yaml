@@ -1,0 +1,4 @@
+namespace: apache
+
+resources:
+- no-root/

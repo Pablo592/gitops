@@ -1,0 +1,86 @@
+kind: Kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+labels:
+- includeSelectors: true
+  pairs:
+    cluster: prod
+
+resources:
+- ../../base
+- secret-dev.yaml
+- secret-lab.yaml
+- secret-prod.yaml
+      
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: <argo-cd-domain>
+  target:
+    kind: Ingress
+    name: argocd-server-http-ingress
+
+- patch: |-
+    - op: add
+      path: /spec/generators/0/git/directories/0
+      value:
+        path: "argo/base/clusters-configs/lab"
+
+    - op: add
+      path: /spec/generators/0/git/directories/1
+      value:
+        path: "argo/base/clusters-configs/dev"
+
+    - op: add
+      path: /spec/generators/0/git/directories/2
+      value:
+        path: "argo/base/clusters-configs/prod"
+
+    - op: remove
+      path: /spec/generators/0/git/directories/3
+  target:
+    kind: ApplicationSet
+    name: wildcard-generator
+
+- patch: |-
+    - op: add
+      path: /data
+      value: {}
+    - op: add
+      path: /data/oidc.keycloak.clientSecret
+      value: <keycloak-client-secret>
+  target:
+    kind: Secret
+    name: argocd-secret
+
+- patch: |-
+    - op: add
+      path: /data
+      value: {}
+    - op: add
+      path: /data/poliy.default
+      value: role:readonly
+    - op: add
+      path: /data/poliy.csv
+      value: | 
+          g, servicios, role:admin
+
+  target:
+    kind: ConfigMap
+    name: argocd-rbac-cm
+
+- patch: |-
+    - op: add
+      path: /data/url
+      value: https://<argo-cd-domain>
+    - op: add
+      path: /data/oidc.config
+      value: |
+        name: Keycloak
+        issuer: https://<keycloak-domain>/realms/<realm>
+        clientID: argocd
+        clientSecret: $oidc.keycloak.clientSecret
+        requestedScopes: ["openid", "profile", "email", "groups"]
+  target: 
+    kind: ConfigMap
+    name: argocd-cm

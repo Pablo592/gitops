@@ -1,0 +1,3 @@
+resources:
+- gitops/gitops-project.yaml
+- gitops/gitops-generator.yaml

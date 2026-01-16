@@ -1,0 +1,10 @@
+apiVersion: builtin
+kind: HelmChartInflationGenerator
+metadata:
+  name: {name}
+name: base_webserver
+repo: "https://<chart-museum-domain>"
+releaseName: {name}
+namespace: {namespace}
+valuesFile: ./values.yaml
+version: 4.3.0

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-lab
+  namespace: argocd
+spec:
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  destinations:
+  - namespace: '*'
+    name: "lab"
+
+  - namespace: "argocd"
+    server: "https://kubernetes.default.svc"
+  
+  sourceRepos:
+  - https://<gitlab-domain>/servicios/kubernetes/gitops.git
+
+  roles:
+    - name: admin
+      description: "Rol admin para miembros del grupo servicios"
+      policies:
+      - p, proj:gitops-lab:admin, applicationsets, *, gitops-lab/*, allow
+      - p, proj:gitops-lab:admin, applications, *, gitops-lab/*, allow
+      groups:
+      - servicios
+
+  

@@ -1,0 +1,86 @@
+resources:
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/ha/install.yaml
+  - ./resources/ingress.yaml
+  - ./resources/secret-repo-gitops.yaml
+  - ./clusters-configs/wildcard.yaml
+
+namespace: argocd
+
+patches:
+  - target:
+      kind: Service
+      name: argocd-metrics
+    patch: |
+      - op: add
+        path: "/metadata/annotations"
+        value:
+          prometheus.io/path: /metrics
+          prometheus.io/port: "8080"
+          prometheus.io/scrape: "true"
+
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |-
+      - op: add
+        path: /data
+        value: {}
+
+      - op: add
+        path: /data/kustomize.buildOptions
+        value: --enable-helm
+
+      - op: add
+        path: /data/timeout.reconciliation
+        value: 60s
+
+      - op: add
+        path: /data/resource.compareoptions
+        value: |
+          ignoreResourceStatusField: crd
+
+      - op: add
+        path: /data/resource.customizations.ignoreDifferences.apiextensions.k8s.io_CustomResourceDefinition
+        value: |
+          jsonPointers:
+          - /spec/preserveUnknownFields
+
+      - op: add
+        path: /data/resource.customizations.ignoreDifferences.batch_Job
+        value: |
+          jsonPointers:
+          - /metadata/annotations/timestamp
+          - /spec/template/metadata/annotations/timestamp
+
+
+  - target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+    patch: |-
+      - op: add
+        path: /data/server.insecure
+        value: "true"
+      - op: add
+        path: /data/controller.log.level
+        value: "error"
+      - op: add
+        path: /data/server.log.level
+        value: "error"
+      - op: add
+        path: /data/reposerver.log.level
+        value: "error"
+      - op: add
+        path: /data/commitserver.log.level
+        value: "error"
+      - op: add
+        path: /data/dexserver.log.level
+        value: "error"
+      - op: add
+        path: /data/applicationsetcontroller.log.level
+        value: "error"
+      - op: add
+        path: /data/notificationscontroller.log.level
+        value: "error"
+      - op: add
+        path: /data/applicationcontroller.log.level
+        value: "error"

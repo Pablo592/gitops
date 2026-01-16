@@ -1,0 +1,4 @@
+generators:
+- helmchart.yaml
+
+namespace: {namespace}

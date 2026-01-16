@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gitops-generator-lab
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://<gitlab-domain>/servicios/kubernetes/gitops.git
+      revision: master
+      directories:
+      - path: environment/lab/*
+      - path: environment/lab/exclude
+        exclude: true
+  template:
+    metadata:
+      name: '{{path.basename}}-lab'
+      labels: 
+        env: lab
+    spec:
+      project: gitops-lab
+      source:
+        repoURL: https://<gitlab-domain>/servicios/kubernetes/gitops.git
+        targetRevision: master
+        path: '{{path}}'
+      destination:
+        name: lab
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true

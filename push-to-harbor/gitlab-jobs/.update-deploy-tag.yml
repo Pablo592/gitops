@@ -8,7 +8,7 @@
   stage: update_deploy_tag
   variables:
     # Default values and constants
-    GIT_USER_EMAIL: "push_harbor@unc.edu.ar"
+    GIT_USER_EMAIL: "push_harbor@gmail.com"
     GIT_USER_NAME: "ci-cd-push-harbor"
     VAULT_URL: "https://<vault-domain>"
     VAULT_AUTH_PATH: "/v1/auth/gitlab/login"
