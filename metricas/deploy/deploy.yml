@@ -1,0 +1,370 @@
+deploy_to_gitops:
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://<vault-domain>
+  tags:
+    - servicios-ci-cd
+  image: <image-registry-domain>/servicios/alpine-mongosh-yq:1.0.0
+  stage: deploy
+  before_script:
+    - git config --global user.email "pipeline@gmail.com"
+    - git config --global user.name "ci-cd-pipeline"
+  script:
+      |
+      export NAMESPACE=$(echo "$CI_PROJECT_PATH" | awk -F'/' '{print $(NF-1)}') # Nombre del grupo
+
+      ########################### Esto se agregó para las métricas #########################          
+
+      # ------------------ Tracking de cambios ------------------
+      DISABLED_APPS_JSON='[]'
+      ENABLED_APPS_JSON='[]'
+      # --------------------------------------------------------
+
+      ######################################################################################
+
+
+      # Obtener secreto de vault
+      echo "[INFO] Obteniendo token de acceso al repositorio 'gitops' desde Vault"
+      response=$(curl -s --request POST \
+           --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+           https://<vault-domain>/v1/auth/gitlab/login)
+
+      VAULT_TOKEN=$(echo $response | jq -r .auth.client_token)
+      response=$( curl -s \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        https://<vault-domain>/v1/gitlab/data/ci-cd/gitops-token
+      )
+      
+      GIT_TOKEN=$(echo $response | jq -r .data.data.GITOPS_TOKEN)
+
+      # Si el values se llama "values-<cluster>.yaml" la aplicacion se va a desplegar o actualizar 
+      APPS_AVAILABLE=$(find ./ -type f \( -name 'values-*.yml' -or -name 'values-*.yaml' \) ! -name 'values-*-disabled.yaml' ! -name 'values-*-disabled.yml' -print)
+
+      # Si se llama "values-<cluster>-disabled.yaml" se va a desactivar 
+      APPS_DISABLED=$(find ./ -type f \( -name 'values-*-disabled.yaml' -or -name 'values-*-disabled.yml' \) -print)
+
+      git clone https://oauth2:"$GIT_TOKEN"@"$GITOPS_REPO"
+      cd "$GITOPS_FOLDER" || exit
+
+      validate_configmap_names() {
+          local VALUES_FILE="../$1"
+          local has_error=0
+
+          # Verificar si el archivo existe
+          if [[ ! -f "$VALUES_FILE" ]]; then
+              echo "[ERROR] No se puede encontrar el archivo $VALUES_FILE"
+              return 1
+          fi
+
+          # Obtener valores necesarios usando yq
+          local group=$(yq e '.group' "$VALUES_FILE")
+          local project=$(yq e '.project' "$VALUES_FILE")
+
+          # Validar ConfigMaps del Deployment
+          if [[ $(yq e '.deployment.enabled' "$VALUES_FILE") == "true" ]] && \
+             [[ $(yq e '.deployment.ConfigMap.enabled' "$VALUES_FILE") == "true" ]]; then
+
+              # Obtener la cantidad de ConfigMaps en deployment
+              local deployment_cms=$(yq e '.deployment.ConfigMap.ConfigMaps[].name' "$VALUES_FILE")
+
+              for cm_name in $deployment_cms; do
+                  # Construir el nombre completo del ConfigMap como lo hace el template
+                  local full_name="${group}-${project}-deployment-${cm_name}"
+                  # Reemplazar puntos y guiones bajos por guiones y convertir a minúsculas
+                  full_name=$(echo "$full_name" | tr '.' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
+
+                  # Validar longitud
+                  if [[ ${#full_name} -gt 63 ]]; then
+                      echo "[ERROR] El nombre del ConfigMap '$full_name' en deployment excede los 63 caracteres (${#full_name})"
+                      has_error=1
+                  fi
+              done
+          fi
+
+          # Validar ConfigMaps del CronJob
+          if [[ $(yq e '.CronJob.enabled' "$VALUES_FILE") == "true" ]] && \
+             [[ $(yq e '.CronJob.ConfigMap.enabled' "$VALUES_FILE") == "true" ]]; then
+
+              # Obtener la cantidad de ConfigMaps en CronJob
+              local cronjob_cms=$(yq e '.CronJob.ConfigMap.ConfigMaps[].name' "$VALUES_FILE")
+
+              for cm_name in $cronjob_cms; do
+                  # Construir el nombre completo del ConfigMap como lo hace el template
+                  local full_name="${group}-${project}-cronjob-${cm_name}"
+                  # Reemplazar puntos y guiones bajos por guiones y convertir a minúsculas
+                  full_name=$(echo "$full_name" | tr '.' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
+
+                  # Validar longitud
+                  if [[ ${#full_name} -gt 63 ]]; then
+                      echo "Error: El nombre del ConfigMap '$full_name' en cronjob excede los 63 caracteres (${#full_name})"
+                      has_error=1
+                  fi
+              done
+          fi
+
+          # Retornar el estado de error
+          return $has_error
+      }
+
+      if [ -n "$APPS_DISABLED" ]; then
+
+      ########################### Esto se agregó para las métricas #########################
+
+          TMP_DISABLED_APPS_JSON='[]'
+
+      ######################################################################################
+
+          while IFS= read -r LINE; do
+              APP=$(dirname "$LINE" | cut -d "/" -f2) # El nombre de la app la sacamos del directorio donde esta el values_disabled.yaml
+              ENV=$(echo "$LINE" | cut -d "/" -f3 | cut -d'-' -f2) # Se obtiene el nombre del cluster
+              DEST_PATH=environment/"$ENV"/"$NAMESPACE"
+              
+              echo "[INFO] Deshabilitando $APP en en el cluster $ENV"
+
+              # Si el path no existe dentro de argo, quiere decir que la aplicación no estaba desplegada y no hay que hacer nada
+              if [ ! -e "$DEST_PATH/$APP" ]; then
+                  echo "[INFO] La aplicacion $APP no existe en argo $ENV, nada que hacer"
+                  continue
+              fi
+                  
+              # Quitamos la linea del resource del kustomization general
+              sed -i "/^- $APP/d" "$DEST_PATH/kustomization.yaml"
+              rm -r "$DEST_PATH"/"$APP"
+
+              # Si la aplicacion era la última que quedaba dentro del namespace, se borra todo el directorio
+              if [ "$(ls "$DEST_PATH" | grep -cv "kustomization.yaml")" -eq 0 ]; then
+                  rm -r "$DEST_PATH"
+                  echo "[INFO] $APP era la ultima app del proyecto $ENV/$NAMESPACE, se deshabilita"
+              else
+                  echo "[INFO] Se deshabilitó $APP en $ENV."
+              fi
+
+              ########################### Esto se agregó para las métricas #########################
+              # --------- REGISTRO JSON ---------
+              TMP_DISABLED_APPS_JSON=$(jq \
+                --arg app "$APP" \
+                --arg env "$ENV" \
+                '. + [{app: $app, env: $env, action: "disabled"}]' \
+                <<< "$TMP_DISABLED_APPS_JSON"
+              )
+              # --------------------------------
+              ######################################################################################
+
+          done < <(printf '%s\n' "$APPS_DISABLED")
+
+          ########################### Esto se agregó para las métricas #########################
+
+          DISABLED_APPS_JSON="$TMP_DISABLED_APPS_JSON"
+   
+          ######################################################################################
+
+      fi
+
+      if [ -n "$APPS_AVAILABLE" ]; then
+
+         ########################### Esto se agregó para las métricas #########################
+
+         TMP_ENABLED_APPS_JSON='[]'
+
+         ######################################################################################
+
+          while IFS= read -r LINE; do
+              APP=$(dirname "$LINE" | cut -d "/" -f2)  # El nombre de la app la sacamos del directorio donde esta el values.yaml
+              ENV=$(echo "$LINE" | cut -d "/" -f3 | cut -d "-" -f2 | cut -d "." -f1) # Se obtiene el nombre del cluster
+              DEST_PATH=environment/"$ENV"/"$NAMESPACE"
+              EXTENSION=$(echo "$LINE" | cut -d "/" -f3 | cut -d "." -f2) #buscamos si es .yml o .yaml
+
+              echo "[INFO] Desplegando $APP en el cluster $ENV"
+
+              VALUES_FILE="$APP/values-$ENV.$EXTENSION"
+
+              # Validar los nombres de los ConfigMaps
+              if validate_configmap_names "$VALUES_FILE"; then
+                  echo "[INFO] ✅ Todos los nombres de ConfigMaps son válidos (menores a 63 caracteres)"
+              else
+                  echo "[ERROR] ❌ Se encontraron errores en la validación de nombres de ConfigMaps"
+                  exit 1
+              fi
+
+              mkdir -p "$DEST_PATH"
+              mkdir -p "$DEST_PATH"/"$APP"
+
+              # CONFIG KUSTOMIZATION GENERAL
+              # - Hay que modificar o crear un kustomization que haga referencia a las diferentes aplicaciones en su resources:
+              # - Si ya existe uno en el path de GITOPS, simplemente se agrega una linea - $APP al final de los resources de no estar
+              #   agregada ya previamente
+              # - Si no, usando un template guardado en la ruta ci/cd de GITOPS, se genera uno nuevo con la app y namespace requeridos 
+              actualizo=0
+              if [ -e "$DEST_PATH/kustomization.yaml" ]; then
+                  if [ -z "$(grep "$APP/" "$DEST_PATH"/kustomization.yaml)" ]; then
+                      echo "- $APP/" >>  "$DEST_PATH"/kustomization.yaml
+                      echo "[INFO] Desplegando $APP en el proyecto $ENV/$NAMESPACE"                  
+                  else
+                    actualizo=1
+                  fi                    
+              else
+                  sed "s/{namespace}/$NAMESPACE/" ci-cd/kustomization_top_template.yaml > "$DEST_PATH"/kustomization.yaml
+                  echo "- $APP/" >>  "$DEST_PATH"/kustomization.yaml
+                  echo "[INFO] Creando el proyecto $ENV/$NAMESPACE con $APP"  
+
+                  ########################### Esto se agregó para las métricas #########################
+                  
+                  # --------- REGISTRO JSON ---------
+                  TMP_ENABLED_APPS_JSON=$(jq \
+                    --arg app "$APP" \
+                    --arg env "$ENV" \
+                    '. + [{app: $app, env: $env, action: "deploy"}]' \
+                    <<< "$TMP_ENABLED_APPS_JSON")
+                  # --------------------------------
+
+                  ######################################################################################                  
+
+              fi
+
+              # Se crea el kustomization "base" segun un template agregando el namespace
+              # Se crea un helm inflator generator segun un template agregando namespace y nombre de la app
+              sed "s/{namespace}/$NAMESPACE/" ci-cd/kustomization_base_template.yaml > "$DEST_PATH"/"$APP"/kustomization.yaml
+              
+              # Se comprueba que exista el archivo helmchart.yaml en el directorio de la app, si no existe se crea
+              if [ ! -f "$DEST_PATH/$APP/helmchart.yaml" ]; then
+                sed "s/{namespace}/$NAMESPACE/; s/{name}/$APP/g" ci-cd/helmchart_template.yaml > "$DEST_PATH/$APP/helmchart.yaml"
+              fi
+
+              # Remplazamos el chart version si esta especificado en el values
+              export CHART_VERSION=$(grep "chart_version:" ../"$VALUES_FILE" | awk '{print $2}' | sed 's/"//g')
+              if [[ ! -z "$CHART_VERSION" ]]; then
+                sed -i "s/^version:.*/version: $CHART_VERSION/" "$DEST_PATH"/"$APP"/helmchart.yaml
+              fi
+
+              # En el values reemplazamos los campos cluster, group y project con los valores de los valores de la rama, 
+              # grupo y directorio de la app para que los recursos se creen en el cluster de forma correcta
+              sed -i "s/^cluster:.*/cluster: $ENV/" ../"$VALUES_FILE"
+              sed -i "s/^group:.*/group: $NAMESPACE/" ../"$VALUES_FILE"
+              sed -i "s/^project:.*/project: $APP/" ../"$VALUES_FILE"
+
+
+              if cmp -s ../"$VALUES_FILE" "$DEST_PATH"/"$APP"/values."$EXTENSION"; then
+                echo "[INFO] Nada que hacer con $APP en $ENV/$NAMESPACE"
+              elif [ $actualizo -eq 1 ]; then
+                echo "[INFO] Actualizando $APP en $ENV/$NAMESPACE"
+
+                ########################### Esto se agregó para las métricas #########################
+
+                # --------- REGISTRO JSON ---------
+                TMP_ENABLED_APPS_JSON=$(jq \
+                  --arg app "$APP" \
+                  --arg env "$ENV" \
+                  '. + [{app: $app, env: $env, action: "update"}]' \
+                  <<< "$TMP_ENABLED_APPS_JSON")
+                # --------------------------------
+
+                ######################################################################################
+
+              fi                  
+              
+              # agregamos el values al dir auxiliar
+              cp ../"$VALUES_FILE" "$DEST_PATH"/"$APP"/values.yaml                     
+          done < <(printf '%s\n' "$APPS_AVAILABLE")
+
+          ########################### Esto se agregó para las métricas #########################
+
+          ENABLED_APPS_JSON="$TMP_ENABLED_APPS_JSON"
+
+          ######################################################################################
+
+      fi
+
+      # Se actualizan los cambios
+      commit="updated $NAMESPACE. Trigger: https://<gitlab-domain>/$CI_PROJECT_PATH/-/commit/$CI_COMMIT_SHA"
+      git add .
+      eval "(git commit -m '$commit' && git push) || echo 0"
+
+
+      #################### MONITOREO ################################################
+      
+      # Obtener secreto de Vault
+      response=$(curl --http1.1 -s --request POST \
+            --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+            https://<vault-domain>/v1/auth/gitlab/login)
+      VAULT_TOKEN=$(echo $response | jq -r .auth.client_token)
+      if [ "$VAULT_TOKEN" == "null" ]; then
+          echo "[ERROR] No se pudo obtener el token de Vault."
+          exit 1
+      fi
+      
+      response=$(curl --http1.1 -s \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        https://<vault-domain>/v1/servicios/data/chart-base/metrics)
+      if [ "$response" == "null" ]; then
+          echo "[ERROR] No se pudo obtener el secreto de Vault."
+          exit 1
+      fi
+      
+      DATABASE=$(echo $response | jq -r .data.data.database)
+      PASSWORD=$(echo $response | jq -r .data.data.password)
+      HOST=$(echo $response | jq -r .data.data.servidor)
+      USER=$(echo $response | jq -r .data.data.usuario )
+      
+      MONGO_URI="mongodb://$USER:$PASSWORD@$HOST:27017/$DATABASE?authSource=admin"
+      
+      DISABLED_APPS_JSON_ESCAPED=$(jq -c . <<< "$DISABLED_APPS_JSON")
+      ENABLED_APPS_JSON_ESCAPED=$(jq -c . <<< "$ENABLED_APPS_JSON")
+      
+      # Este JSON es el json que imprimirás al final por pantalla
+      PIPELINE_JSON=$(jq -n \
+        --arg pid "$CI_PROJECT_ID" \
+        --arg project "$NAMESPACE" \
+        --arg pipeline "DEPLOY" \
+        --arg ppid "$CI_PIPELINE_ID" \
+        --arg namespace "$NAMESPACE" \
+        --argjson disabled "$DISABLED_APPS_JSON_ESCAPED" \
+        --argjson enabled "$ENABLED_APPS_JSON_ESCAPED" \
+        '{
+            ProjectId: $pid,
+            Project: $project,
+            PipelineId: $ppid,
+            Pipeline: $pipeline,
+            Namespace: $namespace,
+            DisabledApps: $disabled,
+            EnabledApps: $enabled
+         }'
+      )
+      
+      # Insert en Mongo con JSON completo
+      REGISTRADO=$(mongosh "$MONGO_URI" --quiet --eval "
+        const data = $PIPELINE_JSON;
+        data.CreatedAt = new Date();
+        JSON.stringify(
+          db.pipelineMetrics.insertOne(data)
+        );
+      ")      
+      #################### FIN DEL MONITOREO ################################################
+
+
+
+
+
+  rules:
+    - changes: 
+        - '**/values-prod.yaml'
+        - '**/values-prod-disabled.yaml'
+        - '**/values-prod.yml'
+        - '**/values-prod-disabled.yml'
+      when: manual
+    - changes: 
+        - '**/values-dev-disabled.yaml'
+        - '**/values-dev.yaml'
+        - '**/values-rke2.yaml'
+        - '**/values-rke2-disabled.yaml'
+        - '**/values-lab.yaml'
+        - '**/values-lab-disabled.yaml'
+        - '**/values-dev-disabled.yml'
+        - '**/values-dev.yml'
+        - '**/values-rke2.yml'
+        - '**/values-rke2-disabled.yml'
+        - '**/values-lab.yml'
+        - '**/values-lab-disabled.yml'
+        - '**/values-ext.yml'
+        - '**/values-ext-disabled.yml'
+        - '**/values-ext.yaml'
+        - '**/values-ext-disabled.yaml'
