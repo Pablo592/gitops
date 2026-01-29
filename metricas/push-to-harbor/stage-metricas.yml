@@ -31,7 +31,13 @@
 
         echo "Imagenes $image y $image_latest pusheadas a Harbor"
 
-        
+
+
+        ########################### Esto se agregó para las métricas #########################
+        {
+          echo "$image"
+        } >> built_images.txt
+        ######################################################################################
       }
 
       find . -type f -name 'Dockerfile' -not -path "*/\.*/*" > $DOCKERFILES
@@ -63,14 +69,18 @@
       
   artifacts:
     reports:
-      dotenv: tag.env
+    ########################### Esto se agregó para las métricas #########################
+      dotenv: built_images.txt
+    ######################################################################################
 
 build_image_dev_demo:
   image: <image-registry-domain>/servicios/kaniko:v1.16.0-debug
   extends: .build_image_common
   script:
     - |
-      echo "TAG=$CI_COMMIT_SHORT_SHA" > tag.env
+      ########################### Esto se agregó para las métricas #########################
+      : > built_images.txt
+      ######################################################################################
       
       while IFS= read -r linea; do
         DIRECTORY=$(echo "$linea" | sed 's/\/Dockerfile$//; s/^\.\///')
@@ -83,13 +93,14 @@ build_image_dev_demo:
         fi
 
         build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
-        echo "$DIRECTORY" >> built_images.txt
       done < "$DOCKERFILES"
   artifacts:
     reports:
       dotenv: tag.env
     paths:
+        ########################### Esto se agregó para las métricas #########################
       - built_images.txt
+        ######################################################################################
   dependencies:
     - check_project
   rules:
@@ -105,7 +116,9 @@ build_image_prod:
         exit 1
       fi
 
-      echo "TAG=$CI_COMMIT_TAG" > tag.env
+      ########################### Esto se agregó para las métricas #########################
+      : > built_images.txt
+      ######################################################################################
 
       while IFS= read -r linea; do
         DIRECTORY=$(echo "$linea" | sed 's/\/Dockerfile$//; s/^\.\///')
@@ -118,7 +131,6 @@ build_image_prod:
         fi
 
         build_and_push "$linea" "$IMAGE" "$IMAGE_LATEST" "$DIRECTORY"
-        echo "$DIRECTORY" >> built_images.txt
       done < "$DOCKERFILES"
   artifacts:
     reports:
@@ -130,3 +142,69 @@ build_image_prod:
     - check_project
   rules:
     - if: $CI_COMMIT_TAG
+
+
+# ============================================================
+# EXTRA: job que extrae las imágenes junto con otras métricas
+# ============================================================
+
+print_image:
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://<vault-domain>"
+  stage: image-metrics
+  image: <image-registry-domain>/servicios/alpine-mongosh-yq:1.0.0
+  script:
+    - | 
+        #################### MONITOREO ################################################
+
+        # Obtener secreto de Vault
+        response=$(curl --http1.1 -s --request POST \
+              --data '{"jwt": "'${VAULT_ID_TOKEN}'", "role": "gitops-role"}' \
+              https://<vault-domain>"/v1/auth/gitlab/login)
+        VAULT_TOKEN=$(echo $response | jq -r .auth.client_token)
+        if [ "$VAULT_TOKEN" == "null" ]; then
+            echo "[ERROR] No se pudo obtener el token de Vault."
+            exit 1
+        fi
+        response=$(curl --http1.1 -s \
+          -H "X-Vault-Token: $VAULT_TOKEN" \
+          https://<vault-domain>"/v1/servicios/data/chart-base/metrics)
+        if [ "$response" == "null" ]; then
+            echo "[ERROR] No se pudo obtener el secreto de Vault."
+            exit 1
+        fi
+        
+        DATABASE=$(echo $response | jq -r .data.data.database)
+        PASSWORD=$(echo $response | jq -r .data.data.password)
+        HOST=$(echo $response | jq -r .data.data.servidor)
+        USER=$(echo $response | jq -r .data.data.usuario )
+  
+        MONGO_URI="mongodb://$USER:$PASSWORD@$HOST:27017/$DATABASE?authSource=admin"
+        
+        if [ ! -s built_images.txt ]; then
+          echo "[WARN] No hay imágenes para registrar"
+          exit 0
+        fi
+        
+        IMAGES_ARRAY=$(jq -R -s -c 'split("\n") | map(select(length > 0))' < built_images.txt)
+
+        echo "[INFO] Registrando imágenes en Mongo:"
+        echo "$IMAGES_ARRAY"
+
+        mongosh "$MONGO_URI" --quiet --eval "
+          db.pipelineMetrics.insertOne({
+            ProjectId: \"$CI_PROJECT_ID\",
+            Project: \"$CI_PROJECT_PATH\",
+            Pipeline: \"PUSH-TO-HARBOR\",
+            PipelineId: \"$CI_PIPELINE_ID\",
+            Images: $IMAGES_ARRAY,
+            CreatedAt: new Date()
+          })
+        "
+        #################### FIN DEL MONITOREO ################################################
+  dependencies:
+    - build_image_dev_demo
+    - build_image_prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $DEMO_BRANCH || $CI_COMMIT_TAG
